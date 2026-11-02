@@ -57,7 +57,10 @@ def default_type():
 
 
 def ensure_shift_type(name="Weekly Off"):
-    """The shift type used for weekly offs: all day, no auto attendance, marked ESS Weekly Off."""
+    """The shift type used for weekly offs: all day, no auto attendance, marked ESS Weekly Off.
+
+    thinkNXG HR rejects a shift whose length plus check-in/check-out buffers reaches 24 hours, so the buffers are 0
+    (00:00-23:59 is 1,439 minutes)."""
     if not frappe.get_meta("Shift Type").has_field("ess_weekly_off"):
         return name
     if frappe.db.exists("Shift Type", name):
@@ -66,6 +69,7 @@ def ensure_shift_type(name="Weekly Off"):
             frappe.cache.delete_value(TYPES_KEY)
         return name
     doc = frappe.get_doc({"doctype": "Shift Type", "name": name, "start_time": "00:00:00", "end_time": "23:59:00",
+                          "begin_check_in_before_shift_start_time": 0, "allow_check_out_after_shift_end_time": 0,
                           "ess_weekly_off": 1, "enable_auto_attendance": 0})
     if doc.meta.has_field("ess_code"):
         doc.ess_code = "W"

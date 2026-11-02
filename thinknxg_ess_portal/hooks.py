@@ -24,10 +24,12 @@ website_route_rules = [
 after_install = "thinknxg_ess_portal.install.after_install"
 
 # Lets published ESS roster rest days count as days off for compensatory leave (setting-controlled).
+# extend_doctype_class (thinkNXG v16) adds a mixin in front of the native class, so it combines with any other
+# app's override instead of replacing it.
 doctype_js = {"Shift Assignment": "public/js/shift_assignment.js"}
 
-override_doctype_class = {
-    "Compensatory Leave Request": "thinknxg_ess_portal.overrides.compensatory_leave_request.ESSCompensatoryLeaveRequest",
+extend_doctype_class = {
+    "Compensatory Leave Request": ["thinknxg_ess_portal.overrides.compensatory_leave_request.ESSCompensatoryLeaveMixin"],
 }
 after_migrate = "thinknxg_ess_portal.install.after_migrate"
 

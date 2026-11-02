@@ -34,11 +34,14 @@ def _employee(email, reports_to=None):
                            "default_shift": None}).insert(ignore_permissions=True).name
 
 
-def _shift(name, start, end):
+def _shift(name, start, end, buffer=None):
+    """thinkNXG HR rejects shifts whose length plus buffers reaches 24 h, so all-day shifts get no buffers."""
     if not frappe.db.exists("Shift Type", name):
+        if buffer is None:
+            buffer = 0 if (start, end) == ("00:00:00", "23:59:00") else 60
         frappe.get_doc({"doctype": "Shift Type", "name": name, "start_time": start, "end_time": end,
-                        "begin_check_in_before_shift_start_time": 60,
-                        "allow_check_out_after_shift_end_time": 60}).insert(ignore_permissions=True)
+                        "begin_check_in_before_shift_start_time": buffer,
+                        "allow_check_out_after_shift_end_time": buffer}).insert(ignore_permissions=True)
     return name
 
 

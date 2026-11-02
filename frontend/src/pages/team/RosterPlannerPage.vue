@@ -90,8 +90,81 @@ async function flush() {
     saveState.value = pending.size ? "saving" : "saved";
   } catch (e: any) { saveState.value = "error"; ui.toast(e.message, "error"); load(); }
 }
+// shift-type search, copy and fill
+const stQuery = ref("");
+const stAll = ref(false);
+const highlight = ref(false);
+const picking = ref(false);
+const PALETTE_MAX = 8;
+const matchSt = (st: any, q: string) => !q || `${st.name} ${st.code} ${st.start}-${st.end} ${st.start}–${st.end}`.toLowerCase().includes(q.toLowerCase());
+const paletteTypes = computed<any[]>(() => {
+  const all = (g.value?.shift_types || []) as any[];
+  const q = stQuery.value.trim();
+  if (q) return all.filter((st) => matchSt(st, q));
+  if (stAll.value || all.length <= PALETTE_MAX) return all;
+  const keep = new Set([...(g.value.used_shift_types || []), brush.value.shift]);
+  return all.filter((st) => keep.has(st.name));
+});
+const manyTypes = computed(() => (g.value?.shift_types || []).length > PALETTE_MAX);
+const hiddenTypes = computed(() => (g.value?.shift_types || []).length - paletteTypes.value.length);
+const brushType = computed(() => (brush.value.kind === "shift" ? types.value[brush.value.shift || ""] : null));
+const markedCount = computed(() => {
+  if (brush.value.kind !== "shift") return 0;
+  let n = 0;
+  for (const e of emps.value) for (const d of dates.value) if (cell(e.name, d)?.s === brush.value.shift) n++;
+  return n;
+});
+function pickFirst() {
+  const st = paletteTypes.value[0];
+  if (!st) return;
+  brush.value = { kind: "shift", shift: st.name };
+  stQuery.value = "";
+}
+function copyFrom(e: string, d: string) {
+  const c = cell(e, d);
+  picking.value = false;
+  if (c?.s) { brush.value = { kind: "shift", shift: c.s }; brushLoc.value = c.l || ""; ui.toast(`Copied ${c.s}. Click, drag or use Fill shift to mark it.`, "info"); }
+  else if (c?.r) { brush.value = { kind: "rest" }; ui.toast("Copied a rest day.", "info"); }
+  else ui.toast("That day has nothing to copy.", "info");
+}
+
+const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const fillOpen = ref(false);
+const fillQuery = ref("");
+const fill = ref<any>({ shift: "", location: "", from: "", to: "", days: [0, 1, 2, 3, 4, 5, 6], scope: "shown", skipRest: true, skipLeave: true, skipPlanned: false });
+const fillTypes = computed<any[]>(() => ((g.value?.shift_types || []) as any[]).filter((st) => matchSt(st, fillQuery.value.trim()) || st.name === fill.value.shift));
+const fillPeople = computed<string[]>(() => fill.value.scope === "all" ? allEmps.value.map((e: any) => e.name) : fill.value.scope === "selected" ? selectedRows.value : emps.value.map((e: any) => e.name));
+function openFill() {
+  const first = dates.value.find((d) => !locked(d)) || g.value.roster.from_date;
+  fill.value = { ...fill.value, shift: brush.value.kind === "shift" ? brush.value.shift : g.value.shift_types[0]?.name, location: brushLoc.value,
+    from: first, to: g.value.roster.to_date, scope: selectedRows.value.length ? "selected" : "shown" };
+  fillQuery.value = "";
+  fillOpen.value = true;
+}
+function applyFill() {
+  const f = fill.value;
+  if (!f.shift || !f.from || !f.to || f.to < f.from) { ui.toast("Choose a shift and a date range.", "error"); return; }
+  const days = dates.value.filter((d) => d >= f.from && d <= f.to && !locked(d) && f.days.includes(new Date(`${d}T00:00:00`).getDay()));
+  let marked = 0, skipped = 0;
+  for (const e of fillPeople.value) for (const d of days) {
+    const cur = cell(e, d);
+    if ((f.skipRest && (cur?.r || (!cur?.s && isWO(e, d)))) || (f.skipLeave && g.value.leaves[e]?.[d]) || (f.skipPlanned && cur?.s && cur.s !== f.shift)) { skipped++; continue; }
+    if (cur?.s === f.shift && (cur.l || "") === (f.location || "")) continue;
+    if (!g.value.cells[e]) g.value.cells[e] = {};
+    g.value.cells[e][d] = { ...(cur || {}), s: f.shift, l: f.location || null, r: 0, w: 0 };
+    pending.set(`${e}|${d}`, { employee: e, date: d, shift_type: f.shift, shift_location: f.location || null, rest: 0, note: cur?.n || null });
+    marked++;
+  }
+  brush.value = { kind: "shift", shift: f.shift };
+  brushLoc.value = f.location || "";
+  fillOpen.value = false;
+  ui.toast(`${f.shift} marked on ${marked} day(s)${skipped ? `, ${skipped} skipped` : ""}`);
+  if (marked) { saveState.value = "saving"; flush(); }
+}
+
 function down(e: string, i: number, ev: PointerEvent) {
   active.value = { r: emps.value.findIndex((x) => x.name === e), c: i };
+  if (picking.value || ev.altKey) { copyFrom(e, dates.value[i]); return; }
   if (ev.shiftKey && lastClick.value?.e === e) {
     const [a, b] = [Math.min(lastClick.value.i, i), Math.max(lastClick.value.i, i)];
     for (let k = a; k <= b; k++) apply(e, dates.value[k]);
@@ -120,6 +193,12 @@ function key(ev: KeyboardEvent) {
   if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); apply(e, d); focusCell(r, c + 1); return; }
   if (ev.key === "Delete" || ev.key === "Backspace") { ev.preventDefault(); const keep = brush.value; brush.value = { kind: "clear" }; apply(e, d); brush.value = keep; return; }
   const k = ev.key.toUpperCase();
+  if (ev.ctrlKey || ev.metaKey) {
+    if (k === "C") { ev.preventDefault(); copyFrom(e, d); }
+    else if (k === "V") { ev.preventDefault(); apply(e, d); focusCell(r, c + 1); }
+    return;
+  }
+  if (ev.altKey) return;
   const st = (g.value.shift_types as any[]).find((x) => x.code.toUpperCase().startsWith(k));
   if (st && k.length === 1) { ev.preventDefault(); brush.value = { kind: "shift", shift: st.name }; apply(e, d); focusCell(r, c + 1); }
   else if (k === "R" || k === "-") { ev.preventDefault(); brush.value = { kind: "rest" }; apply(e, d); focusCell(r, c + 1); }
@@ -241,8 +320,14 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
       </div>
 
       <div class="toolbar" v-if="!archived">
+        <div class="stsearch">
+          <input class="input" type="search" v-model="stQuery" placeholder="Search shift types by name, code or time" aria-label="Search shift types" @keydown.enter.prevent="pickFirst" @keydown.esc="stQuery = ''" />
+          <button v-if="manyTypes && !stQuery" class="btn ghost sm" @click="stAll = !stAll">{{ stAll ? "Show shifts used here" : `All shift types (+${hiddenTypes})` }}</button>
+          <span v-if="brushType" class="small muted cur">Marking <strong>{{ brushType.name }}</strong> {{ brushType.start }}–{{ brushType.end }} · {{ markedCount }} day(s) planned</span>
+        </div>
         <div class="brushes" role="radiogroup" aria-label="Paint with">
-          <button v-for="st in g.shift_types" :key="st.name" role="radio" :aria-checked="brush.kind === 'shift' && brush.shift === st.name" class="brush"
+          <span v-if="stQuery && !paletteTypes.length" class="small muted nomatch">No shift type matches "{{ stQuery }}".</span>
+          <button v-for="st in paletteTypes" :key="st.name" role="radio" :aria-checked="brush.kind === 'shift' && brush.shift === st.name" class="brush"
                   :class="{ on: brush.kind === 'shift' && brush.shift === st.name }" @click="brush = { kind: 'shift', shift: st.name }" :title="`${st.name} ${st.start}–${st.end} (key ${st.code})`">
             <ShiftChip :code="st.code" :color="st.color" size="sm" /><span class="bn">{{ st.name }}</span><span class="bt num">{{ st.start }}–{{ st.end }}</span></button>
           <button role="radio" :aria-checked="brush.kind === 'rest'" class="brush" :class="{ on: brush.kind === 'rest' }" @click="brush = { kind: 'rest' }"><ShiftChip rest size="sm" /><span class="bn">Rest day</span></button>
@@ -250,6 +335,9 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
         </div>
         <div class="tools">
           <select v-if="g.locations.length && brush.kind === 'shift'" class="select sm-sel" v-model="brushLoc" aria-label="Shift location"><option value="">Location from Shift Type</option><option v-for="l in g.locations" :key="l.name" :value="l.name">{{ l.location_name || l.name }}</option></select>
+          <button class="btn sm" :class="{ on: picking }" :aria-pressed="picking" @click="picking = !picking" title="Then click a day to copy its shift (or Alt+click any day)">{{ picking ? "Click a day to copy…" : "Copy from grid" }}</button>
+          <button class="btn sm" @click="openFill">Fill shift…</button>
+          <label class="check small hl" v-if="brush.kind === 'shift'"><input type="checkbox" v-model="highlight" />Highlight on grid</label>
           <button class="btn sm" @click="openPattern">Apply pattern</button>
           <button class="btn sm" @click="openCopy">Copy roster</button>
           <button class="btn sm" @click="openReqs">Coverage needs</button>
@@ -257,10 +345,10 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
           <button class="btn sm" @click="openAdd">Add people</button>
           <span class="save small" :class="saveState" role="status">{{ saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : saveState === "error" ? "Not saved" : "" }}</span>
         </div>
-        <p class="small muted hint">Click or drag across cells to paint. Shift-click fills a range. Keyboard: arrows move, a shift's code paints it, R for rest, Delete clears. Rest on a holiday-list weekly off shows as W.</p>
+        <p class="small muted hint">Click or drag across cells to paint. Shift-click fills a range. Keyboard: arrows move, a shift's code paints it, R for rest, Delete clears, Ctrl/⌘+C copies a day's shift and Ctrl/⌘+V pastes it. Alt+click copies too. Rest on a holiday-list weekly off shows as W.</p>
       </div>
 
-      <div class="grid-wrap" @keydown="key">
+      <div class="grid-wrap" :class="{ picking }" @keydown="key">
         <table class="grid" role="grid" :aria-label="`${g.roster.title} roster`">
           <thead>
             <tr>
@@ -280,7 +368,7 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
               </th>
               <td v-for="(d, i) in dates" :key="d" :class="{ wk: weekend(d), today: d === g.today }">
                 <button :id="`c-${r}-${i}`" class="cell" :tabindex="active.r === r && active.c === i ? 0 : -1" :disabled="locked(d) && !cell(e.name, d)"
-                        :class="{ locked: locked(d), pastedit: d < g.today && pastEditable(d), issue: issueAt[`${e.name}|${d}`], leave: g.leaves[e.name]?.[d], hol: g.holidays[e.name]?.[d] && !g.holidays[e.name][d].weekly_off }"
+                        :class="{ locked: locked(d), pastedit: d < g.today && pastEditable(d), issue: issueAt[`${e.name}|${d}`], leave: g.leaves[e.name]?.[d], hol: g.holidays[e.name]?.[d] && !g.holidays[e.name][d].weekly_off, dim: highlight && brush.kind === 'shift' && cell(e.name, d)?.s !== brush.shift, mark: highlight && brush.kind === 'shift' && cell(e.name, d)?.s === brush.shift }"
                         :aria-label="cellLabel(e, d)" :title="issueAt[`${e.name}|${d}`]?.join('\n')"
                         @pointerdown.prevent="down(e.name, i, $event)" @pointerenter="enter(e.name, i)" @focus="active = { r, c: i }">
                   <ShiftChip v-if="cell(e.name, d)?.s" :code="types[cell(e.name, d).s]?.code" :color="types[cell(e.name, d).s]?.color" size="sm" />
@@ -403,6 +491,30 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
         <template #footer><button class="btn" @click="reqOpen = false">{{ t("Cancel") }}</button><button class="btn primary" :disabled="busy" @click="saveReqs">{{ t("Save") }}</button></template>
       </AccessibleDialog>
 
+      <AccessibleDialog :open="fillOpen" title="Fill shift" @close="fillOpen = false">
+        <div class="stack">
+          <div class="field"><label for="fq">Shift type</label>
+            <input id="fq" class="input" type="search" v-model="fillQuery" placeholder="Search by name, code or time" @keydown.enter.prevent="fillTypes[0] && (fill.shift = fillTypes[0].name)" />
+            <div class="fillopts" role="radiogroup" aria-label="Shift type">
+              <button v-for="st in fillTypes" :key="st.name" type="button" role="radio" :aria-checked="fill.shift === st.name" class="brush" :class="{ on: fill.shift === st.name }" @click="fill.shift = st.name">
+                <ShiftChip :code="st.code" :color="st.color" size="sm" /><span class="bn">{{ st.name }}</span><span class="bt num">{{ st.start }}–{{ st.end }}</span></button>
+              <span v-if="!fillTypes.length" class="small muted">No shift type matches.</span>
+            </div></div>
+          <div class="field" v-if="g.locations.length"><label for="fl">Location</label><select id="fl" class="select" v-model="fill.location"><option value="">Location from Shift Type</option><option v-for="l in g.locations" :key="l.name" :value="l.name">{{ l.location_name || l.name }}</option></select></div>
+          <div class="row wrap"><div class="field"><label for="ff">From</label><input id="ff" type="date" class="input" v-model="fill.from" :min="g.roster.from_date" :max="g.roster.to_date" /></div>
+            <div class="field"><label for="ft">To</label><input id="ft" type="date" class="input" v-model="fill.to" :min="fill.from || g.roster.from_date" :max="g.roster.to_date" /></div></div>
+          <fieldset class="wds"><legend class="small">On</legend>
+            <label v-for="(w, i) in WD" :key="w" class="check small"><input type="checkbox" :value="i" v-model="fill.days" />{{ w }}</label></fieldset>
+          <div class="field"><label for="fs">For</label><select id="fs" class="select" v-model="fill.scope">
+            <option value="shown">People shown ({{ emps.length }})</option><option value="selected" :disabled="!selectedRows.length">Selected people ({{ selectedRows.length }})</option><option value="all">Everyone on this roster ({{ allEmps.length }})</option></select></div>
+          <label class="check"><input type="checkbox" v-model="fill.skipRest" />Keep rest days and weekly offs</label>
+          <label class="check"><input type="checkbox" v-model="fill.skipLeave" />Skip days with leave</label>
+          <label class="check"><input type="checkbox" v-model="fill.skipPlanned" />Keep days that already have another shift</label>
+          <p class="small muted">Past days that are locked are never changed. Nothing reaches thinkNXG HR until you publish.</p>
+        </div>
+        <template #footer><button class="btn" @click="fillOpen = false">{{ t("Cancel") }}</button><button class="btn primary" :disabled="!fill.shift || !fill.days.length" @click="applyFill">Mark {{ fill.shift || "shift" }}</button></template>
+      </AccessibleDialog>
+
       <AccessibleDialog :open="woOpen" title="Mark weekly offs" @close="woOpen = false">
         <div class="stack">
           <p>Sets each person's weekly off days from their holiday list as rest days (shown as W).</p>
@@ -453,6 +565,17 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
 :deep(.wo b) { background: var(--surface-2); color: var(--ink-2); border-style: dashed; }
 .toolbar { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); position: sticky; top: calc(var(--header) + 6px); z-index: 6; }
 .brushes { display: flex; gap: 6px; flex-wrap: wrap; }
+.stsearch { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.stsearch .input { max-width: 340px; }
+.stsearch .cur { margin-inline-start: auto; }
+.nomatch { align-self: center; }
+.fillopts { display: flex; gap: 6px; flex-wrap: wrap; max-height: 180px; overflow: auto; margin-top: 6px; }
+.wds { display: flex; gap: 10px; flex-wrap: wrap; border: 0; padding: 0; margin: 0; }
+.tools .btn.on { border-color: var(--brand); background: var(--brand-soft); color: var(--brand); }
+.hl { white-space: nowrap; }
+.grid-wrap.picking .cell { cursor: copy; }
+.cell.dim { opacity: .3; }
+.cell.mark { box-shadow: inset 0 0 0 2px var(--brand); border-radius: 6px; }
 .brush { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); cursor: pointer; font-size: var(--fs-sm); }
 .brush.on { border-color: var(--brand); background: var(--brand-soft); box-shadow: inset 0 0 0 1px var(--brand); }
 .bn { font-weight: 500; } .bt { color: var(--ink-3); font-size: var(--fs-xs); }

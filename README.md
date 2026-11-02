@@ -1,6 +1,6 @@
 # thinkNXG ESS Portal
 
-> **This is the `version-15` branch** for Frappe / thinkNXG HR **v15** (Python 3.10+). It has every feature of
+> **This is the `version-15` branch** for thinkNXG Framework and thinkNXG HR **v15** (Python 3.10+). It has every feature of
 > `version-16`. The differences are listed under [Running on v15](#running-on-v15). For thinkNXG HR v16 use the
 > `version-16` branch.
 
@@ -38,7 +38,7 @@ npm run dev                    # http://localhost:8080/ess, proxies /api to FRAP
 npm test                       # Vitest
 ```
 
-Requires `frappe`, `erpnext`, `hrms` (v15, `version-15` branches). Optional: `pip install pypdf` (index PDF policies), `pywebpush` (push notifications).
+Requires thinkNXG Framework, thinkNXG ERP and thinkNXG HR v15 (apps `frappe`, `erpnext`, `hrms` on their `version-15` branches). Optional: `pip install pypdf` (index PDF policies), `pywebpush` (push notifications).
 
 **After install**
 1. Assign roles: `ESS Portal Admin`, `ESS HR Agent`, `ESS Payroll Officer`, `ESS Department Head` (created on install). Set *ESS Department Head* on Department records if department heads need team scope.

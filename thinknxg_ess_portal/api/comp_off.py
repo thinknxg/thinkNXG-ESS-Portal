@@ -1,7 +1,7 @@
 """Compensatory leave through native Compensatory Leave Request.
 
 Employees create a draft request for eligible worked days off; the approver submits it (native allocation) or
-rejects it. Frappe HR's own validation (holidays, attendance, overlap, leave period) runs on save and on submit.
+rejects it. thinkNXG HR's own validation (holidays, attendance, overlap, leave period) runs on save and on submit.
 """
 import frappe
 from frappe import _

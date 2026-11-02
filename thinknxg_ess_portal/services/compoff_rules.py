@@ -2,7 +2,7 @@
 
 A day qualifies when it was a day off (holiday-list weekly off or holiday, or a published roster rest day if
 allowed) AND attendance was submitted as Present / Work From Home / Half Day, AND it isn't already claimed.
-Frappe HR re-validates holidays and attendance when the request is saved, so this list is advisory.
+thinkNXG HR re-validates holidays and attendance when the request is saved, so this list is advisory.
 """
 
 WORKED = ("Present", "Work From Home", "Half Day")

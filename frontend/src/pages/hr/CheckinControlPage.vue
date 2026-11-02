@@ -213,6 +213,15 @@ async function test(e: any) { tHits.value = []; tQ.value = e.employee_name; tRes
       <ToggleSwitch id="r8" v-model="v.roster_notify_on_publish" label="Notify people when their roster is published or changes" :disabled="!editable" />
       <ToggleSwitch id="r9" v-model="v.roster_auto_weekly_off" label="Mark weekly offs from holiday lists" hint="New rosters, added people, patterns and copies keep each person's weekly offs as rest days." :disabled="!editable" />
 
+      <h2 class="sect">Weekly offs in holiday lists</h2>
+      <ToggleSwitch id="h1" v-model="v.enable_weekly_off_holidays" label="Add weekly-off shift assignments to holiday lists" hint="Each date of a Weekly Off / Rest Day shift assignment becomes a &quot;Weekly Off&quot; holiday in the employee's holiday list, and is removed again when the assignment changes, is cancelled or deleted." :disabled="!editable" />
+      <ToggleSwitch id="h2" v-model="v.roster_rest_as_weekly_off" label="Publish roster rest days as weekly-off assignments" hint="Rest days in a published roster become Weekly Off shift assignments, so they reach holiday lists too." :disabled="!editable || !v.enable_weekly_off_holidays" />
+      <div class="form-grid">
+        <div class="field"><label for="h3">Weekly Off shift type</label><select id="h3" class="select" v-model="v.weekly_off_shift_type" :disabled="!editable"><option v-for="st in ov?.shift_types || []" :key="st">{{ st }}</option></select><span class="hint">Created as "Weekly Off" on install. Ticking Weekly Off on a shift assignment switches it to this type.</span></div>
+        <div class="field"><label for="h4">When no holiday list covers a date</label><select id="h4" class="select" v-model="v.weekly_off_missing_list" :disabled="!editable"><option>Stop with an error</option><option>Skip those days and note it on the assignment</option></select></div>
+      </div>
+      <p class="small muted">Shared holiday lists are never changed: the employee gets a personal copy that follows the shared list. Public holidays and holidays added by hand are never removed.</p>
+
       <h2 class="sect">Past roster days</h2>
       <div class="form-grid">
         <div class="field"><label for="b1">Allow past-day changes for (days)</label><input id="b1" type="number" min="0" max="366" class="input" v-model.number="v.roster_backdate_days" :disabled="!editable" /><span class="hint">0 turns past-day changes off for everyone.</span></div>

@@ -8,8 +8,10 @@ export const NAV: NavGroup[] = [
   ] },
   { label: "My work", items: [
     { label: "Attendance", to: "/attendance", icon: "clock", module: "attendance" },
+    { label: "Check-in records", to: "/attendance/checkins", icon: "clock", module: "attendance" },
     { label: "My roster", to: "/roster", icon: "calendar", module: "roster" },
     { label: "Leave", to: "/leave", icon: "sun", module: "leave" },
+    { label: "Compensatory leave", to: "/leave/comp-off", icon: "sun", module: "comp_off" },
     { label: "Holidays", to: "/holidays", icon: "calendar" },
   ] },
   { label: "My finances", items: [
@@ -27,10 +29,11 @@ export const NAV: NavGroup[] = [
     { label: "HR helpdesk", to: "/support", icon: "lifebuoy", module: "helpdesk" },
     { label: "HR assistant", to: "/assistant", icon: "spark", module: "assistant" },
   ] },
-  { label: "Team", cap: "manager|hr|planner", items: [
+  { label: "Team", cap: "manager|hr|planner|team_checkins", items: [
     { label: "Team overview", to: "/team", icon: "users", cap: "manager|hr" },
     { label: "Approvals", to: "/team/approvals", icon: "check", cap: "manager|hr", badge: "approvals" },
     { label: "Roster planner", to: "/team/roster", icon: "calendar", cap: "planner", module: "roster" },
+    { label: "Team check-ins", to: "/team/checkins", icon: "clock", cap: "team_checkins", module: "attendance" },
     { label: "Team analytics", to: "/team/analytics", icon: "chart", cap: "manager", module: "analytics" },
   ] },
   { label: "HR operations", cap: "hr|agent|admin", items: [

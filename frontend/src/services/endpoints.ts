@@ -18,6 +18,7 @@ export const Attendance = {
   checkIn: (p: Record<string, any>) => post<any>("attendance.check_in", withId(p)),
   checkOut: (p: Record<string, any>) => post<any>("attendance.check_out", withId(p)),
   myLog: () => get<any[]>("attendance.my_checkin_log"),
+  myCheckins: (from_date: string, to_date: string) => get("attendance.my_checkins", { from_date, to_date }),
   month: (year: number, month: number) => get("attendance.get_month", { year, month }),
   requestCorrection: (p: Record<string, any>) => post<MutationResult>("attendance.request_correction", withId(p)),
   corrections: () => get<any[]>("attendance.my_corrections"),
@@ -31,21 +32,33 @@ export const Roster = {
   cancelRequest: (name: string) => post("roster.cancel_request", { name }),
   holidays: (year: number) => get("roster.holidays", { year }),
   icsUrl: (from_date: string, to_date: string) => downloadUrl("roster.calendar_ics", { from_date, to_date }),
-  list: (status?: string) => get<any[]>("roster.list_rosters", { status }),
-  teamMembers: () => get<any[]>("roster.team_members"),
+  list: (p: Record<string, any> = {}) => get<any[]>("roster.list_rosters", p),
+  teamMembers: (p: Record<string, any> = {}) => get<any[]>("roster.team_members", p),
   create: (p: Record<string, any>) => post("roster.create_roster", p),
   get: (name: string) => get("roster.get_roster", { name }),
   saveCells: (name: string, cells: any[]) => post("roster.save_cells", { name, cells }),
   addEmployees: (name: string, employees: string[], prefill = "current") => post("roster.add_employees", { name, employees, prefill }),
   removeEmployee: (name: string, employee: string) => post("roster.remove_employee", { name, employee }),
   applyPattern: (p: Record<string, any>) => post("roster.apply_pattern", p),
-  copyFrom: (name: string, source: string) => post("roster.copy_from", { name, source }),
+  copyFrom: (name: string, source: string, keep_weekly_offs = 1) => post("roster.copy_from", { name, source, keep_weekly_offs }),
+  markWeeklyOffs: (name: string, employees: string[] | null, overwrite = 0) => post("roster.mark_weekly_offs", { name, employees, overwrite }),
   setRequirements: (name: string, rows: any[]) => post("roster.set_requirements", { name, rows }),
   validate: (name: string) => get("roster.validate_roster", { name }),
-  publish: (name: string, trim_manual = 0) => post("roster.publish", { name, trim_manual }),
+  publish: (name: string, trim_manual = 0, backfill = 0) => post("roster.publish", { name, trim_manual, backfill }),
   archive: (name: string) => post("roster.archive", { name }),
   patterns: () => get<any[]>("roster.patterns"),
   savePattern: (p: Record<string, any>) => post("roster.save_pattern", p),
+};
+
+export const CheckinRecords = {
+  team: (p: Record<string, any>) => get("checkin_records.team_checkins", p),
+};
+
+export const CompOff = {
+  eligible: () => get("comp_off.eligible_days"),
+  create: (p: Record<string, any>) => post<MutationResult>("comp_off.create_request", withId(p)),
+  mine: () => get<any[]>("comp_off.my_requests"),
+  withdraw: (name: string) => post("comp_off.withdraw", { name }),
 };
 
 export const CheckinAdmin = {

@@ -18,6 +18,7 @@ TYPES = {
     "ESS Profile Change Request": {"key": "profile", "flag": None, "approver": None},
     "ESS Document Request": {"key": "document", "flag": None, "approver": None},
     "ESS Roster Change Request": {"key": "roster", "flag": "include_attendance", "approver": "approver"},
+    "Compensatory Leave Request": {"key": "comp_off", "flag": "include_leave", "approver": "ess_approver"},
 }
 
 
@@ -157,6 +158,24 @@ def pending(user=None, types=None):
                               "swap_with_name": r.swap_with_name}, r.employee, r.employee_name, r.creation.date(),
                              r.approver if r.approver and r.approver != user else None))
 
+    if "comp_off" in types and frappe.db.exists("DocType", "Compensatory Leave Request") and \
+            frappe.get_meta("Compensatory Leave Request").has_field("ess_approver"):
+        appr = approvers(user, "include_leave")
+        flt = [["docstatus", "=", 0], ["ess_status", "!=", "Rejected"]]
+        if not identity.is_hr_manager(user):
+            flt.append(["ess_approver", "in", appr])
+        for r in frappe.get_all("Compensatory Leave Request", filters=flt,
+                                fields=["name", "employee", "employee_name", "leave_type", "work_from_date", "work_end_date",
+                                        "half_day", "reason", "ess_approver", "creation"], limit=200):
+            if r.employee == my_emp:
+                continue
+            days = date_diff(r.work_end_date, r.work_from_date) + 1 - (0.5 if r.half_day else 0)
+            out.append(_item("Compensatory Leave Request", r, _("Compensatory leave · {0} day(s)").format(days),
+                             {"from_date": str(r.work_from_date), "to_date": str(r.work_end_date), "reason": r.reason,
+                              "leave_type": r.leave_type, "days": days, "half_day": r.half_day},
+                             r.employee, r.employee_name, r.creation.date(),
+                             r.ess_approver if r.ess_approver and r.ess_approver != user else None))
+
     out.sort(key=lambda x: x["submitted_on"])
     return out
 
@@ -241,6 +260,17 @@ def act(doctype, name, action, comment=None, user=None):
     elif doctype == "ESS Roster Change Request":
         from thinknxg_ess_portal.services.roster import decide_change
         decide_change(doc, approved, comment)
+    elif doctype == "Compensatory Leave Request":
+        doc.flags.ignore_permissions = True
+        if approved:
+            if not _workflow_action(doc, action):
+                doc.submit()  # native on_submit creates or extends the compensatory Leave Allocation
+        else:
+            doc.db_set({"ess_status": "Rejected", "ess_review_comment": comment})
+        from thinknxg_ess_portal.services.notifications import notify
+        notify(frappe.db.get_value("Employee", doc.employee, "user_id"), "Leave",
+               _("Compensatory leave {0}").format(_("approved") if approved else _("rejected")),
+               comment or f"{doc.work_from_date} → {doc.work_end_date}", "/ess/leave/comp-off", doctype, name)
 
     if comment and doctype not in ("ESS Document Request", "ESS Roster Change Request"):
         try:

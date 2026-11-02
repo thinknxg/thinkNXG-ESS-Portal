@@ -10,6 +10,8 @@ class ESSRosterEntry(Document):
         if self.is_rest_day:
             self.shift_type = None
             self.shift_location = None
+        else:
+            self.is_weekly_off = 0
         self.employee_name = self.employee_name or frappe.db.get_value("Employee", self.employee, "employee_name")
 
 

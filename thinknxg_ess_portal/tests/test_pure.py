@@ -18,6 +18,7 @@ def _load(name):
 geo = _load("geo")
 shiftwin = _load("shiftwin")
 rules = _load("roster_rules")
+compoff = _load("compoff_rules")
 
 HQ = {"name": "Ruwi HQ", "latitude": 23.5880, "longitude": 58.3829, "radius": 150}
 SITE = {"name": "Duqm Site", "latitude": 19.6575, "longitude": 57.7060, "radius": 400}
@@ -125,6 +126,36 @@ def test_coverage_weekday_override():
     reqs = [{"shift_type": "G", "weekday": "All days", "min_staff": 3}, {"shift_type": "G", "weekday": "Friday", "min_staff": 1}]
     assert rules.coverage({(d, "G"): 1}, reqs, [d]) == []
     assert rules.coverage({(d + timedelta(days=1), "G"): 2}, reqs, [d + timedelta(days=1)])[0]["need"] == 3
+
+
+def test_segments_keep_rest_and_skip_blocked():
+    d = date(2026, 10, 1)
+    entries = [(d + timedelta(days=i), k) for i, k in enumerate(["G", "G", None, None, "G", "G"])]
+    segs = rules.segments(entries, blocked={d + timedelta(days=4)})
+    assert [(s["key"], s["start"].day, s["end"].day) for s in segs] == [("G", 1, 2), (None, 3, 4), ("G", 6, 6)]
+
+
+def test_compoff_classification():
+    d = date(2026, 10, 30)
+    wo = {"description": "Weekly off", "weekly_off": True}
+    ok = compoff.classify({"date": d, "holiday": wo, "attendance": {"status": "Present", "working_hours": 8}})
+    assert ok["eligible"] and ok["kind"] == "Weekly off" and not ok["half_day"]
+    half = compoff.classify({"date": d, "holiday": wo, "attendance": {"status": "Half Day", "working_hours": 4}})
+    assert half["eligible"] and half["half_day"]
+    assert not compoff.classify({"date": d, "holiday": wo, "attendance": None})["eligible"]
+    assert not compoff.classify({"date": d, "holiday": wo, "attendance": {"status": "Present"}, "claimed": "HR-CLR-1"})["eligible"]
+    short = compoff.classify({"date": d, "holiday": wo, "attendance": {"status": "Present", "working_hours": 2}}, min_hours=4)
+    assert not short["eligible"] and "2.0 h" in short["reason"]
+    rest = {"date": d, "holiday": None, "roster_rest": True, "attendance": {"status": "Present"}}
+    assert compoff.classify(rest)["eligible"]
+    assert not compoff.classify(rest, allow_roster_rest=False)["eligible"]
+    assert compoff.classify({"date": d, "holiday": None, "attendance": {"status": "Present"}}) is None
+
+
+def test_compoff_group_ranges():
+    d = date(2026, 10, 1)
+    days = [d, d + timedelta(days=1), d + timedelta(days=5)]
+    assert compoff.group_ranges(days) == [(d, d + timedelta(days=1)), (d + timedelta(days=5), d + timedelta(days=5))]
 
 
 def test_runs_and_patterns():

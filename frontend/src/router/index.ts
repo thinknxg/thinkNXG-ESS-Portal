@@ -13,6 +13,8 @@ const routes: RouteRecordRaw[] = [
 
   { path: "/attendance", name: "attendance", component: () => import("@/pages/attendance/AttendancePage.vue"), meta: { title: "Attendance", module: "attendance" } },
   { path: "/attendance/check-in", name: "checkin", component: () => import("@/pages/attendance/CheckInPage.vue"), meta: { title: "Check in", module: "attendance" } },
+  { path: "/attendance/checkins", name: "my-checkins", component: () => import("@/pages/attendance/MyCheckinsPage.vue"), meta: { title: "Check-in records", module: "attendance" } },
+  { path: "/leave/comp-off", name: "comp-off", component: () => import("@/pages/leave/CompOffPage.vue"), meta: { title: "Compensatory leave", module: "comp_off" } },
   { path: "/roster", name: "my-roster", component: () => import("@/pages/roster/MyRosterPage.vue"), meta: { title: "My roster", module: "roster" } },
   { path: "/holidays", name: "holidays", component: () => import("@/pages/HolidaysPage.vue"), meta: { title: "Holidays" } },
   { path: "/attendance/corrections", name: "corrections", component: () => import("@/pages/attendance/CorrectionsPage.vue"), meta: { title: "Corrections", module: "attendance" } },
@@ -41,6 +43,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/team/approvals", name: "approvals", component: () => import("@/pages/team/ApprovalsPage.vue"), meta: { title: "Approvals", cap: "manager|hr" } },
   { path: "/team/calendar", name: "team-calendar", component: () => import("@/pages/leave/LeaveCalendarPage.vue"), props: { team: true }, meta: { title: "Leave calendar", cap: "manager" } },
   { path: "/team/analytics", name: "team-analytics", component: () => import("@/pages/team/TeamAnalyticsPage.vue"), meta: { title: "Team analytics", cap: "manager", module: "analytics" } },
+  { path: "/team/checkins", name: "team-checkins", component: () => import("@/pages/team/TeamCheckinsPage.vue"), meta: { title: "Team check-ins", cap: "team_checkins", module: "attendance" } },
   { path: "/team/roster", name: "rosters", component: () => import("@/pages/team/RosterListPage.vue"), meta: { title: "Roster planner", cap: "planner", module: "roster" } },
   { path: "/team/roster/:name", name: "roster-planner", component: () => import("@/pages/team/RosterPlannerPage.vue"), meta: { title: "Roster planner", cap: "planner", module: "roster" } },
   { path: "/team/member/:employee", name: "team-member", component: () => import("@/pages/team/TeamMemberPage.vue"), meta: { title: "Team overview", cap: "manager|hr" } },

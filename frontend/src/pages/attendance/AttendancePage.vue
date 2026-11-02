@@ -41,6 +41,7 @@ function shift(n: number) { const d = new Date(y.value, m.value - 1 + n, 1); y.v
     <PageHeader :title="t('Attendance')" subtitle="Your recorded attendance, from check-ins and HR's attendance records.">
       <RouterLink to="/attendance/check-in" class="btn primary">{{ t("Check in") }}</RouterLink>
       <RouterLink v-if="s.module('roster')" to="/roster" class="btn">{{ t("My roster") }}</RouterLink>
+      <RouterLink to="/attendance/checkins" class="btn">{{ t("Check-in records") }}</RouterLink>
       <RouterLink to="/attendance/corrections" class="btn">{{ t("Corrections") }}</RouterLink>
     </PageHeader>
     <ErrorState :error="error" @retry="reload" />

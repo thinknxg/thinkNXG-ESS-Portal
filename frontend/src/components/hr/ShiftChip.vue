@@ -4,7 +4,7 @@ defineProps<{ code?: string | null; color?: string | null; label?: string; rest?
 
 <template>
   <span class="chip" :class="[size || 'md', { rest }]" :style="color ? { '--sc': color } : undefined" :title="label">
-    <b>{{ rest ? "R" : code }}</b><span v-if="label" class="lbl">{{ label }}</span>
+    <b>{{ rest ? (code || "R") : code }}</b><span v-if="label" class="lbl">{{ label }}</span>
   </span>
 </template>
 

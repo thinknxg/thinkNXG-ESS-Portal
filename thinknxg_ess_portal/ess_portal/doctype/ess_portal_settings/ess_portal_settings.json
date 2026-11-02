@@ -65,6 +65,23 @@
   "allow_shift_swaps",
   "roster_change_notice_hours",
   "roster_notify_on_publish",
+  "roster_auto_weekly_off",
+  "roster_backdate_section",
+  "roster_backdate_days",
+  "roster_backdate_column",
+  "roster_backdate_roles",
+  "checkin_records_section",
+  "show_own_checkins",
+  "manager_checkin_visibility",
+  "checkin_records_column",
+  "checkin_coordinates_visible_to",
+  "checkin_records_max_days",
+  "comp_off_section",
+  "enable_comp_off",
+  "comp_off_window_days",
+  "comp_off_column",
+  "comp_off_allow_roster_rest_days",
+  "comp_off_min_hours",
   "section_break_6",
   "show_team_availability",
   "auto_submit_approved_expenses",
@@ -477,30 +494,151 @@
    "idx": 53
   },
   {
+   "fieldname": "roster_auto_weekly_off",
+   "fieldtype": "Check",
+   "label": "Mark weekly offs from holiday lists",
+   "default": "1",
+   "description": "New rosters, added people, patterns and copies keep each employee's weekly offs as rest days.",
+   "idx": 54
+  },
+  {
+   "fieldname": "roster_backdate_section",
+   "fieldtype": "Section Break",
+   "label": "Past Roster Days",
+   "idx": 55
+  },
+  {
+   "fieldname": "roster_backdate_days",
+   "fieldtype": "Int",
+   "label": "Allow past-day changes for (days)",
+   "default": "31",
+   "description": "How far back authorised users may edit and publish roster days. 0 turns past-day changes off.",
+   "idx": 56
+  },
+  {
+   "fieldname": "roster_backdate_column",
+   "fieldtype": "Column Break",
+   "label": null,
+   "idx": 57
+  },
+  {
+   "fieldname": "roster_backdate_roles",
+   "fieldtype": "Small Text",
+   "label": "Roles allowed to change past days",
+   "default": "HR Manager\nESS Roster Backdate",
+   "description": "One role per line. System Managers and ESS Portal Admins are always allowed. Days with submitted attendance are never changed.",
+   "idx": 58
+  },
+  {
+   "fieldname": "checkin_records_section",
+   "fieldtype": "Section Break",
+   "label": "Check-in Records",
+   "idx": 59
+  },
+  {
+   "fieldname": "show_own_checkins",
+   "fieldtype": "Check",
+   "label": "Employees can see their own check-in records",
+   "default": "1",
+   "idx": 60
+  },
+  {
+   "fieldname": "manager_checkin_visibility",
+   "fieldtype": "Select",
+   "label": "Managers can see check-ins of",
+   "default": "Direct and indirect reports",
+   "options": "Direct and indirect reports\nDirect reports only\nNone",
+   "idx": 61
+  },
+  {
+   "fieldname": "checkin_records_column",
+   "fieldtype": "Column Break",
+   "label": null,
+   "idx": 62
+  },
+  {
+   "fieldname": "checkin_coordinates_visible_to",
+   "fieldtype": "Select",
+   "label": "Show raw GPS coordinates to",
+   "default": "HR only",
+   "options": "HR only\nHR and managers",
+   "description": "Others see the matched location and distance only.",
+   "idx": 63
+  },
+  {
+   "fieldname": "checkin_records_max_days",
+   "fieldtype": "Int",
+   "label": "Maximum days per check-in records query",
+   "default": "31",
+   "idx": 64
+  },
+  {
+   "fieldname": "comp_off_section",
+   "fieldtype": "Section Break",
+   "label": "Compensatory Leave",
+   "idx": 65
+  },
+  {
+   "fieldname": "enable_comp_off",
+   "fieldtype": "Check",
+   "label": "Enable compensatory leave requests",
+   "default": "1",
+   "idx": 66
+  },
+  {
+   "fieldname": "comp_off_window_days",
+   "fieldtype": "Int",
+   "label": "Claim worked days from the last (days)",
+   "default": "60",
+   "idx": 67
+  },
+  {
+   "fieldname": "comp_off_column",
+   "fieldtype": "Column Break",
+   "label": null,
+   "idx": 68
+  },
+  {
+   "fieldname": "comp_off_allow_roster_rest_days",
+   "fieldtype": "Check",
+   "label": "Roster rest days are eligible",
+   "default": "1",
+   "description": "thinkNXG HR's native request only accepts holiday-list days. This app extends it to published roster rest days.",
+   "idx": 69
+  },
+  {
+   "fieldname": "comp_off_min_hours",
+   "fieldtype": "Float",
+   "label": "Minimum worked hours for a claim",
+   "default": "0",
+   "description": "0 means any Present / Work From Home / Half Day attendance qualifies.",
+   "idx": 70
+  },
+  {
    "fieldname": "section_break_6",
    "fieldtype": "Section Break",
    "label": "Attendance & Leave",
-   "idx": 54
+   "idx": 71
   },
   {
    "fieldname": "show_team_availability",
    "fieldtype": "Check",
    "label": "Show Team Availability",
    "default": "1",
-   "idx": 55
+   "idx": 72
   },
   {
    "fieldname": "auto_submit_approved_expenses",
    "fieldtype": "Check",
    "label": "Auto Submit Approved Expenses",
    "default": "0",
-   "idx": 56
+   "idx": 73
   },
   {
    "fieldname": "column_break_7",
    "fieldtype": "Column Break",
    "label": null,
-   "idx": 57
+   "idx": 74
   },
   {
    "fieldname": "profile_editable_fields",
@@ -508,53 +646,53 @@
    "label": "Profile Editable Fields",
    "default": "cell_number,personal_email,current_address,permanent_address,person_to_be_contacted,emergency_phone_number,relation,marital_status,bank_name,bank_ac_no,iban",
    "description": "Employee fields that may be requested for change. Bank fields always require HR approval.",
-   "idx": 58
+   "idx": 75
   },
   {
    "fieldname": "section_break_8",
    "fieldtype": "Section Break",
    "label": "HR Helpdesk",
-   "idx": 59
+   "idx": 76
   },
   {
    "fieldname": "default_ticket_assignee",
    "fieldtype": "Link",
    "label": "Default Ticket Assignee",
    "options": "User",
-   "idx": 60
+   "idx": 77
   },
   {
    "fieldname": "allow_reopen_days",
    "fieldtype": "Int",
    "label": "Allow Reopen Days",
    "default": "7",
-   "idx": 61
+   "idx": 78
   },
   {
    "fieldname": "column_break_9",
    "fieldtype": "Column Break",
    "label": null,
-   "idx": 62
+   "idx": 79
   },
   {
    "fieldname": "auto_close_resolved_days",
    "fieldtype": "Int",
    "label": "Auto Close Resolved Days",
    "default": "5",
-   "idx": 63
+   "idx": 80
   },
   {
    "fieldname": "ticket_rate_limit_per_hour",
    "fieldtype": "Int",
    "label": "Ticket Rate Limit Per Hour",
    "default": "10",
-   "idx": 64
+   "idx": 81
   },
   {
    "fieldname": "section_break_10",
    "fieldtype": "Section Break",
    "label": "Documents",
-   "idx": 65
+   "idx": 82
   },
   {
    "fieldname": "public_verification",
@@ -562,66 +700,66 @@
    "label": "Public Verification",
    "default": "1",
    "description": "Allow third parties to verify generated letters at /ess-verify using the printed code.",
-   "idx": 66
+   "idx": 83
   },
   {
    "fieldname": "column_break_11",
    "fieldtype": "Column Break",
    "label": null,
-   "idx": 67
+   "idx": 84
   },
   {
    "fieldname": "document_rate_limit_per_day",
    "fieldtype": "Int",
    "label": "Document Rate Limit Per Day",
    "default": "5",
-   "idx": 68
+   "idx": 85
   },
   {
    "fieldname": "document_expiry_alert_days",
    "fieldtype": "Int",
    "label": "Document Expiry Alert Days",
    "default": "30",
-   "idx": 69
+   "idx": 86
   },
   {
    "fieldname": "section_break_12",
    "fieldtype": "Section Break",
    "label": "Recognition & Gamification",
-   "idx": 70
+   "idx": 87
   },
   {
    "fieldname": "recognition_requires_approval",
    "fieldtype": "Check",
    "label": "Recognition Requires Approval",
    "default": "0",
-   "idx": 71
+   "idx": 88
   },
   {
    "fieldname": "allow_public_recognition",
    "fieldtype": "Check",
    "label": "Allow Public Recognition",
    "default": "1",
-   "idx": 72
+   "idx": 89
   },
   {
    "fieldname": "column_break_13",
    "fieldtype": "Column Break",
    "label": null,
-   "idx": 73
+   "idx": 90
   },
   {
    "fieldname": "monthly_points_budget",
    "fieldtype": "Int",
    "label": "Monthly Points Budget",
    "default": "100",
-   "idx": 74
+   "idx": 91
   },
   {
    "fieldname": "section_break_14",
    "fieldtype": "Section Break",
    "label": "Analytics",
-   "idx": 75
+   "idx": 92
   },
   {
    "fieldname": "min_group_size",
@@ -629,13 +767,13 @@
    "label": "Min Group Size",
    "default": "5",
    "description": "Breakdowns with fewer people than this are suppressed to protect individuals.",
-   "idx": 76
+   "idx": 93
   },
   {
    "fieldname": "section_break_15",
    "fieldtype": "Section Break",
    "label": "AI HR Assistant",
-   "idx": 77
+   "idx": 94
   },
   {
    "fieldname": "ai_provider",
@@ -643,33 +781,33 @@
    "label": "Ai Provider",
    "options": "Disabled\nAnthropic\nOpenAI Compatible",
    "default": "Disabled",
-   "idx": 78
+   "idx": 95
   },
   {
    "fieldname": "ai_model",
    "fieldtype": "Data",
    "label": "Ai Model",
    "default": "claude-sonnet-5-5",
-   "idx": 79
+   "idx": 96
   },
   {
    "fieldname": "ai_base_url",
    "fieldtype": "Data",
    "label": "Ai Base Url",
    "description": "Only for OpenAI-compatible providers, e.g. https://api.example.com/v1",
-   "idx": 80
+   "idx": 97
   },
   {
    "fieldname": "ai_api_key",
    "fieldtype": "Password",
    "label": "Ai Api Key",
-   "idx": 81
+   "idx": 98
   },
   {
    "fieldname": "column_break_16",
    "fieldtype": "Column Break",
    "label": null,
-   "idx": 82
+   "idx": 99
   },
   {
    "fieldname": "ai_allow_salary_answers",
@@ -677,66 +815,66 @@
    "label": "Ai Allow Salary Answers",
    "default": "0",
    "description": "When off, the assistant links to payslips instead of quoting amounts.",
-   "idx": 83
+   "idx": 100
   },
   {
    "fieldname": "ai_max_requests_per_hour",
    "fieldtype": "Int",
    "label": "Ai Max Requests Per Hour",
    "default": "30",
-   "idx": 84
+   "idx": 101
   },
   {
    "fieldname": "ai_retention_days",
    "fieldtype": "Int",
    "label": "Ai Retention Days",
    "default": "90",
-   "idx": 85
+   "idx": 102
   },
   {
    "fieldname": "ai_system_notice",
    "fieldtype": "Small Text",
    "label": "Ai System Notice",
    "default": "Answers are generated from approved HR policies. Always confirm important decisions with HR.",
-   "idx": 86
+   "idx": 103
   },
   {
    "fieldname": "section_break_17",
    "fieldtype": "Section Break",
    "label": "PWA & Push",
-   "idx": 87
+   "idx": 104
   },
   {
    "fieldname": "pwa_theme_color",
    "fieldtype": "Color",
    "label": "Pwa Theme Color",
    "default": "#0F6E5A",
-   "idx": 88
+   "idx": 105
   },
   {
    "fieldname": "vapid_public_key",
    "fieldtype": "Data",
    "label": "Vapid Public Key",
-   "idx": 89
+   "idx": 106
   },
   {
    "fieldname": "column_break_18",
    "fieldtype": "Column Break",
    "label": null,
-   "idx": 90
+   "idx": 107
   },
   {
    "fieldname": "vapid_private_key",
    "fieldtype": "Password",
    "label": "Vapid Private Key",
-   "idx": 91
+   "idx": 108
   },
   {
    "fieldname": "vapid_subject",
    "fieldtype": "Data",
    "label": "Vapid Subject",
    "default": "mailto:hr@example.com",
-   "idx": 92
+   "idx": 109
   }
  ],
  "permissions": [

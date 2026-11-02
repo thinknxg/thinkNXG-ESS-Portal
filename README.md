@@ -147,10 +147,48 @@ Per-employee **ESS Checkin Policy**: portal access (Inherit/Allow/Deny), GPS (In
 **Managers and HR** use the **Roster planner**: paint shifts with click, drag or keyboard; apply rotation patterns (e.g. 2 days, 2 evenings, 1 night, 2 off) with a per-person stagger; copy a previous roster (whole weeks repeat so weekdays line up); set coverage needs per shift and weekday. Live checks cover overlapping shifts, minimum rest, maximum consecutive days, maximum weekly hours, coverage gaps, leave clashes, people on two rosters, default shifts on rest days, and manual Shift Assignments in the way. Managers can only roster their own reporting line; HR works within its scope.
 
 **Publishing** writes native **Shift Assignments**, one per run of identical days, tagged with `ess_roster`, so thinkNXG HR auto-attendance, shift-based check-in linking and payroll keep working as they do today:
-- Only today onward is written. Past days are locked once published and never rewritten.
+- By default only today onward is written, and past days lock once published. See *Past days* below.
 - Republishing ends or cancels the roster's own future assignments and recreates them; untagged (manual) assignments are never touched unless HR ticks *trim manual assignments*, which ends or deactivates them with a comment.
 - Rest days get no assignment. If an employee also has a **default shift**, thinkNXG HR falls back to it on rest days and may mark absence, so the planner warns; clear default shifts for rostered staff.
 - People whose plan changed are notified. Each publish is recorded in ESS Audit Event.
+
+**Department and branch filters.** The planner and the roster list filter by department, branch and name (kept in the URL, so a filtered view can be bookmarked). New rosters can be created for a whole department or branch, and *Add people* filters the same way. When a filter is on, coverage counts only the people shown and the planner says so.
+
+**Weekly offs.** Weekly offs come from each employee's holiday list (`Employee.holiday_list`, falling back to the company's). With *Mark weekly offs from holiday lists* on, new rosters, patterns and copies prefill them as rest days shown as **W**; *Weekly offs* in the planner re-applies them for everyone, the selected people or the people shown, and keeps days that already have a shift unless you choose to overwrite. Rostering a shift on a weekly off is flagged in the checks. Rest days on non-weekly-off days still show as **R**.
+
+**Past days.** Users with **System Manager**, **ESS Portal Admin** or a role listed in *Roles allowed to change past days* (default `HR Manager` and the new `ESS Roster Backdate` role) can turn on *Edit past days* and fill or fix days within *Allow past-day changes for (days)* (default 31; 0 disables it for everyone). Everyone else sees past published days locked, and the server enforces it. When publishing, *Also apply past days* writes Shift Assignments for the past window:
+- days with submitted **Attendance** are skipped and reported, so payroll-relevant attendance is never silently contradicted;
+- manual (untagged) Shift Assignments are never changed for past days; they are reported instead;
+- the roster's own assignments are split around the changed range, so earlier and later days keep their assignment;
+- every past edit and backfill is written to ESS Audit Event.
+
+After a backfill, re-run *Process Auto Attendance* on the affected Shift Types (or mark attendance) for the past days to pick up the new shifts.
+
+## Check-in records
+
+*Check-in records* (employees) lists every **Employee Checkin** for the person, grouped by day, from all channels: this portal, biometric devices (by `device_id`) and Desk/API, with first in, last out, missing check-outs and the day's attendance. *Team check-ins* (managers and HR) adds date, department, branch and employee filters, an "only days needing attention" view and CSV export.
+
+| Setting | Effect |
+|---|---|
+| Employees can see their own check-in records | turns the employee page on or off |
+| Managers can see check-ins of | *Direct and indirect reports* / *Direct reports only* / *None* |
+| Show raw GPS coordinates to | *HR only* (default) or *HR and managers*; employees always see their own; otherwise only the matched location and distance are returned |
+| Maximum days per check-in records query | caps every request (default 31 days) |
+
+HR users see everyone within their HR scope. The rules are applied on the server; the menu entry only appears when the user has access.
+
+## Compensatory leave
+
+Employees open *Compensatory leave* (in the menu and on the Leave page) and see the days in the last *Claim worked days from the last (days)* (default 60) they worked on a **weekly off**, a **holiday** (from their holiday list) or, if allowed, a **published roster rest day**, with attendance status and hours. A day qualifies when it has submitted attendance (Present, Work From Home or Half Day), meets *Minimum worked hours for a claim*, and isn't already claimed by an open or approved request. Half-day attendance counts as half a day.
+
+Requests are native **Compensatory Leave Request** documents, so allocation follows thinkNXG HR: consecutive full days become one request; each half day becomes its own request (the native form allows one half day per request). The request goes to the employee's leave approver (or reporting manager) and appears in *Approvals* and the inbox as *Comp-off*. Approving submits the request, which credits the leave; rejecting keeps it as a draft marked *Rejected* with the reviewer's comment; the employee can withdraw a pending request.
+
+Setup on the bench:
+- mark at least one **Leave Type** as *Is Compensatory*;
+- an active **Leave Period** must cover the work dates, or thinkNXG HR refuses to submit the request;
+- roster rest days are accepted through an override of `CompensatoryLeaveRequest.validate_holidays` (`overrides/compensatory_leave_request.py`), only while *Roster rest days are eligible* is on; holiday-list days follow the native rules.
+
+New endpoints: `roster.mark_weekly_offs`, `roster.publish(backfill=1)`, `attendance.my_checkins`, `checkin_records.team_checkins`, `comp_off.eligible_days`, `comp_off.create_request`, `comp_off.my_requests`, `comp_off.withdraw`. Settings live in *ESS Portal Settings → Roster, records & leave* and in the portal under *Check-in control*.
 
 ## AI HR assistant
 
@@ -171,8 +209,9 @@ EN/AR with full RTL, light/dark/system themes, keyboard command palette (Ctrl/�
 
 ## Tests
 
-- `thinknxg_ess_portal/tests/test_pure.py` — 17 unit tests for geofence maths, accuracy rules, risk flags, shift windows (including overnight and thinkNXG's timedelta times), roster rules, coverage and rotation patterns. Runs without a bench: `python -m pytest thinknxg_ess_portal/tests/test_pure.py`.
+- `thinknxg_ess_portal/tests/test_pure.py` — 20 unit tests for geofence maths, accuracy rules, risk flags, shift windows (including overnight and thinkNXG's timedelta times), roster rules, coverage and rotation patterns. Runs without a bench: `python -m pytest thinknxg_ess_portal/tests/test_pure.py`.
 - `thinknxg_ess_portal/tests/test_checkin_roster.py` — integration tests: global off vs. Allow override, *Enforce global* ignoring overrides, Deny override writing a denied log, outside-geofence and poor-accuracy refusals, GPS exemption, shift-window enforcement, managers blocked from rostering outside their team, publish creating tagged assignments and republish replacing them, swap needing colleague acceptance before it reaches the manager.
+- `thinknxg_ess_portal/tests/test_roster_compoff.py` — weekly offs prefilled and re-marked, past days locked without the backdate role, backdate role filling a missing past assignment, backfill skipping days with attendance, comp-off eligibility, double-claim prevention and rejection, working days refused, check-in visibility for employees vs managers and hidden coordinates, range cap.
 
 - `thinknxg_ess_portal/tests/test_security.py` — colleague ticket isolation, confidential tickets hidden from agents, internal notes hidden, manager scope = reporting line, non-manager blocked from team member, unauthorised approval blocked, protected profile fields rejected, idempotent duplicate submission, assistant refusal for a colleague's payslip, AI tool identity stripping, self-recognition blocked.
   `bench --site test.site run-tests --app thinknxg_ess_portal`

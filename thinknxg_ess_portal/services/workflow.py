@@ -75,13 +75,15 @@ def pending(user=None, types=None):
         appr = approvers(user, "include_expense")
         for r in frappe.get_all("Expense Claim", filters={"docstatus": 0, "approval_status": "Draft",
                                                           "expense_approver": ["in", appr]},
-                                fields=["name", "employee", "employee_name", "total_claimed_amount", "currency",
-                                        "posting_date", "expense_approver", "remark"],
+                                fields=["name", "employee", "employee_name", "total_claimed_amount",
+                                        "posting_date", "expense_approver", "remark", "company"]
+                                + (["currency"] if frappe.get_meta("Expense Claim").has_field("currency") else []),
                                 order_by="posting_date asc", limit=200):
             if r.employee == my_emp:
                 continue
             out.append(_item("Expense Claim", r, _("Expense claim {0}").format(r.name),
-                             {"amount": r.total_claimed_amount, "currency": r.currency, "remark": r.remark},
+                             {"amount": r.total_claimed_amount, "remark": r.remark,
+                              "currency": r.get("currency") or frappe.get_cached_value("Company", r.company, "default_currency")},
                              r.employee, r.employee_name, r.posting_date,
                              r.expense_approver if r.expense_approver != user else None))
 

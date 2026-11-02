@@ -1,4 +1,4 @@
-"""Thin compatibility layer over thinkNXG HR v16 functions.
+"""Thin compatibility layer over thinkNXG HR v15 functions.
 
 The portal never re-implements leave/attendance/payroll maths - it calls thinkNXG HR. These wrappers
 only isolate import paths that moved between releases.

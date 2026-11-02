@@ -1,6 +1,10 @@
 # thinkNXG ESS Portal
 
-Enterprise Employee Self-Service for **thinkNXG HR v16** — a Vue 3 + TypeScript PWA served at `/ess` by a custom thinkNXG app, for employees, managers and HR.
+> **This is the `version-15` branch** for Frappe / thinkNXG HR **v15** (Python 3.10+). It has every feature of
+> `version-16`. The differences are listed under [Running on v15](#running-on-v15). For thinkNXG HR v16 use the
+> `version-16` branch.
+
+Enterprise Employee Self-Service for **thinkNXG HR v15** — a Vue 3 + TypeScript PWA served at `/ess` by a custom thinkNXG app, for employees, managers and HR.
 
 The portal is an experience layer. Attendance, leave, payroll, expenses, performance and workflows stay in thinkNXG HR; the app never re-implements leave maths, payroll or accounting. Custom DocTypes exist only for capabilities thinkNXG HR doesn't have (helpdesk, letters, recognition, AI audit, policies, delegation).
 
@@ -34,7 +38,7 @@ npm run dev                    # http://localhost:8080/ess, proxies /api to FRAP
 npm test                       # Vitest
 ```
 
-Requires `frappe`, `erpnext`, `hrms` (v16). Optional: `pip install pypdf` (index PDF policies), `pywebpush` (push notifications).
+Requires `frappe`, `erpnext`, `hrms` (v15, `version-15` branches). Optional: `pip install pypdf` (index PDF policies), `pywebpush` (push notifications).
 
 **After install**
 1. Assign roles: `ESS Portal Admin`, `ESS HR Agent`, `ESS Payroll Officer`, `ESS Department Head` (created on install). Set *ESS Department Head* on Department records if department heads need team scope.
@@ -176,7 +180,7 @@ A Shift Assignment can be a **Weekly Off / Rest Day**: tick *Weekly Off / Rest D
 
 What is never touched: dates that were already holidays (public holidays, the list's own weekly offs, rows added by hand, other assignments' rows) are left as they are and are not removed later. Only rows carrying the assignment's tag (`Holiday.ess_shift_assignment`) are ever deleted.
 
-**Which holiday list.** The list is the one thinkNXG HR applies to the employee on each date (Holiday List Assignments in v16, honouring list changes within the range; `Employee.holiday_list` on releases without them). Shared lists are never written to:
+**Which holiday list.** The list is the one thinkNXG HR applies to the employee on each date (on v15 that is `Employee.holiday_list`, or the company's default holiday list when it is empty). Shared lists are never written to:
 - the first time an employee needs weekly offs in a shared list, a **personal copy** is created (`<list> · <employee>`, with *ESS Personal List For* and *ESS Copied From* set) and assigned to the employee from the date the shared list applied to them. A list used only by that employee is written directly;
 - the copy follows the shared list: when HR edits the shared list, its holidays are re-copied into every personal copy, keeping the weekly-off rows and anything added by hand to the copy (a new public holiday on the same date as a weekly off replaces the weekly-off row, noted on the list);
 - because thinkNXG HR picks an employee's own assignment before the company's, later company Holiday List Assignments are mirrored onto these employees (now and whenever a new company assignment is submitted), so next year's company list still applies. Generated assignments are marked *Created by ESS (weekly offs)*.
@@ -243,7 +247,33 @@ EN/AR with full RTL, light/dark/system themes, keyboard command palette (Ctrl/�
 ## Notes and assumptions to verify on your bench
 
 - Python package is `thinknxg_ess_portal` (thinkNXG requires the package to match the app name), so methods are `thinknxg_ess_portal.api.*` rather than `ess_portal.api.*`.
-- Field names follow thinkNXG HR v16 and are guarded with `meta.has_field` where they vary (Checkin latitude/longitude, Shift Location, Overtime Slip, Employee Benefit Ledger, Goal, Onboarding). Confirm against your installed release and customisations.
+- Field names follow thinkNXG HR v15 and are guarded with `meta.has_field` where they vary (Checkin latitude/longitude, Shift Location, Overtime Slip, Employee Benefit Ledger, Goal, Onboarding). Confirm against your installed release and customisations.
 - Expense claims are created as drafts with the company's default payable account; submission/payment stays with Accounts unless *Auto-submit approved expenses* is enabled. Employee Advance uses the company's default advance account.
 - The UI uses its own lightweight component set rather than `frappe-ui`, to keep the build reproducible; it can be swapped in later without touching the API layer.
 - Realtime events are published (`ess_notification`, `ess_ticket_update`); the SPA polls unread counts every 60 s and does not require socket.io.
+
+## Running on v15
+
+Install from this branch on a v15 bench:
+
+```bash
+bench get-app --branch version-15 https://github.com/thinknxg/thinknxg_ess_portal
+bench --site <site> install-app thinknxg_ess_portal
+```
+
+Every portal feature works on v15 (dashboard, attendance and GPS check-in control, rosters and the planner, holidays, leave
+and compensatory leave, check-in records, payslips, expenses and advances, HR helpdesk, documents and letters, policies,
+recognition, goals, analytics, approvals, the AI assistant, PWA and offline queue). These parts behave differently:
+
+| Area | v16 | v15 (this branch) |
+|---|---|---|
+| Compensatory leave on roster rest days | `extend_doctype_class` mixin, combines with other apps | `override_doctype_class` subclass. If another app also overrides Compensatory Leave Request, only one applies (bench warns on install). |
+| Which holiday list an employee follows | Holiday List Assignments, which can change by date | `Employee.holiday_list`, else the company default |
+| Weekly-off personal holiday lists | assigned from a date with a Holiday List Assignment; later company assignments are mirrored | set on `Employee.holiday_list` (with a comment on the Employee); nothing to mirror |
+| Expense claim currency | the claim's own currency | the company's default currency (v15 claims have no currency field) |
+| Overtime slips (team analytics), benefit ledger (payslips) | shown | not shown (those DocTypes are v16-only) |
+
+Because a v15 employee has one holiday list for all dates, a personal copy is made of the list the employee follows today.
+When the year changes, give the employee their next holiday list as usual; the first weekly off in it makes a new
+personal copy.
+

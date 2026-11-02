@@ -5,6 +5,7 @@ Only validate_holidays is extended, and only when "Roster rest days are eligible
 """
 import frappe
 from frappe.utils import cint, getdate
+from hrms.hr.doctype.compensatory_leave_request.compensatory_leave_request import CompensatoryLeaveRequest
 from hrms.hr.utils import get_holiday_dates_for_employee
 
 
@@ -21,3 +22,7 @@ class ESSCompensatoryLeaveMixin:
         if all(d in off for d in shiftwin.day_range(fd, td)):
             return
         return super().validate_holidays()
+
+
+class ESSCompensatoryLeaveRequest(ESSCompensatoryLeaveMixin, CompensatoryLeaveRequest):
+    """v15: registered with override_doctype_class (extend_doctype_class arrived in v16)."""

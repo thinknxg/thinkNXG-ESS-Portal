@@ -12,13 +12,16 @@ def overview():
     emp = guard("enable_expenses")
     claims = frappe.get_all("Expense Claim", filters={"employee": emp.name},
                             fields=["name", "posting_date", "total_claimed_amount", "total_sanctioned_amount",
-                                    "approval_status", "status", "docstatus", "currency", "remark",
-                                    "expense_approver"], order_by="creation desc", limit=50)
+                                    "approval_status", "status", "docstatus", "remark", "expense_approver"]
+                            + (["currency"] if frappe.get_meta("Expense Claim").has_field("currency") else []),
+                            order_by="creation desc", limit=50)
     advances = frappe.get_all("Employee Advance", filters={"employee": emp.name},
                               fields=["name", "posting_date", "advance_amount", "paid_amount", "claimed_amount",
                                       "status", "purpose", "currency"], order_by="creation desc", limit=20)
     types = frappe.get_all("Expense Claim Type", pluck="name", order_by="name")
     currency = frappe.db.get_value("Company", emp.company, "default_currency")
+    for c in claims:
+        c.currency = c.get("currency") or currency  # Expense Claim has no currency field in v15
     return {"claims": claims, "advances": advances, "types": types, "currency": currency,
             "totals": {"pending": flt(sum(c.total_claimed_amount or 0 for c in claims if c.docstatus == 0
                                           and c.approval_status == "Draft"), 2),
@@ -79,7 +82,7 @@ def claim_detail(name):
     files = frappe.get_all("File", filters={"attached_to_doctype": "Expense Claim", "attached_to_name": name},
                            fields=["file_name", "file_url"])
     return {"name": doc.name, "posting_date": doc.posting_date, "approval_status": doc.approval_status,
-            "status": doc.status, "docstatus": doc.docstatus, "currency": doc.get("currency"), "remark": doc.remark,
+            "status": doc.status, "docstatus": doc.docstatus, "currency": doc.get("currency") or frappe.get_cached_value("Company", doc.company, "default_currency"), "remark": doc.remark,
             "total_claimed_amount": doc.total_claimed_amount, "total_sanctioned_amount": doc.total_sanctioned_amount,
             "expense_approver": frappe.utils.get_fullname(doc.expense_approver) if doc.expense_approver else None,
             "expenses": [{"expense_date": r.expense_date, "expense_type": r.expense_type, "description": r.description,

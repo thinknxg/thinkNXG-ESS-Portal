@@ -1,7 +1,7 @@
 app_name = "thinknxg_ess_portal"
 app_title = "thinkNXG ESS Portal"
 app_publisher = "Kreatao"
-app_description = "Enterprise Employee Self-Service portal for thinkNXG HR v16"
+app_description = "Enterprise Employee Self-Service portal for thinkNXG HR v15"
 app_email = "hello@kreatao.com"
 app_license = "MIT"
 required_apps = ["frappe", "erpnext", "hrms"]
@@ -24,12 +24,12 @@ website_route_rules = [
 after_install = "thinknxg_ess_portal.install.after_install"
 
 # Lets published ESS roster rest days count as days off for compensatory leave (setting-controlled).
-# extend_doctype_class (thinkNXG v16) adds a mixin in front of the native class, so it combines with any other
-# app's override instead of replacing it.
+# thinkNXG v15 has no extend_doctype_class, so the native class is subclassed. If another app also overrides
+# Compensatory Leave Request, only the last one installed applies (bench warns on install).
 doctype_js = {"Shift Assignment": "public/js/shift_assignment.js"}
 
-extend_doctype_class = {
-    "Compensatory Leave Request": ["thinknxg_ess_portal.overrides.compensatory_leave_request.ESSCompensatoryLeaveMixin"],
+override_doctype_class = {
+    "Compensatory Leave Request": "thinknxg_ess_portal.overrides.compensatory_leave_request.ESSCompensatoryLeaveRequest",
 }
 after_migrate = "thinknxg_ess_portal.install.after_migrate"
 

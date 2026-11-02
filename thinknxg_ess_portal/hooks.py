@@ -22,6 +22,11 @@ website_route_rules = [
 ]
 
 after_install = "thinknxg_ess_portal.install.after_install"
+
+# Lets published ESS roster rest days count as days off for compensatory leave (setting-controlled).
+override_doctype_class = {
+    "Compensatory Leave Request": "thinknxg_ess_portal.overrides.compensatory_leave_request.ESSCompensatoryLeaveRequest",
+}
 after_migrate = "thinknxg_ess_portal.install.after_migrate"
 
 # ---------------------------------------------------------------- record-level security

@@ -6,6 +6,7 @@ ROLES = {
     "ESS HR Agent": "Works HR helpdesk tickets",
     "ESS Payroll Officer": "Handles payroll-related tickets and confidential categories",
     "ESS Department Head": "Approves and sees aggregates for departments they head",
+    "ESS Roster Backdate": "May change and publish past roster days within the configured window",
 }
 
 TICKET_CATEGORIES = [
@@ -90,6 +91,15 @@ def _custom_fields():
              "read_only": 1},
             {"fieldname": "ess_log", "label": "ESS Check-in Log", "fieldtype": "Link", "options": "ESS Checkin Log",
              "insert_after": "ess_distance", "read_only": 1},
+        ],
+        # Like Attendance Request, a draft Compensatory Leave Request has no rejected state or approver.
+        "Compensatory Leave Request": [
+            {"fieldname": "ess_status", "label": "ESS Review Status", "fieldtype": "Select", "options": "Pending\nRejected",
+             "default": "Pending", "insert_after": "reason", "read_only": 1, "in_standard_filter": 1},
+            {"fieldname": "ess_approver", "label": "ESS Approver", "fieldtype": "Link", "options": "User",
+             "insert_after": "ess_status", "read_only": 1},
+            {"fieldname": "ess_review_comment", "label": "ESS Review Comment", "fieldtype": "Small Text",
+             "insert_after": "ess_approver", "read_only": 1},
         ],
         # Attendance Request has no native rejection state; the portal records it here.
         "Attendance Request": [

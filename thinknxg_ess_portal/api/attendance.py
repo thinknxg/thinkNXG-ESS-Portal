@@ -163,6 +163,16 @@ def my_checkin_log(limit=30, offset=0):
 
 
 @frappe.whitelist(methods=["GET"])
+def my_checkins(from_date=None, to_date=None):
+    """The employee's own Employee Checkin records from every channel (portal, devices, Desk)."""
+    emp = guard("enable_attendance")
+    if not cint(identity.settings().get("show_own_checkins")):
+        frappe.throw(_("Check-in records aren't available in the portal. Ask HR."), frappe.PermissionError)
+    from thinknxg_ess_portal.api.checkin_records import fetch
+    return fetch([emp.name], from_date, to_date, coordinates=True)
+
+
+@frappe.whitelist(methods=["GET"])
 def get_month(year=None, month=None):
     emp = guard("enable_attendance")
     start = getdate(f"{cint(year) or getdate().year}-{cint(month) or getdate().month:02d}-01")

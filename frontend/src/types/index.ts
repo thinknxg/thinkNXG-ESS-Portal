@@ -9,6 +9,7 @@ export interface Capabilities {
   payroll_officer: boolean;
   admin: boolean;
   planner?: boolean;
+  team_checkins?: boolean;
   modules: Record<string, boolean>;
 }
 

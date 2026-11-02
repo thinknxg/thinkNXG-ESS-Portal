@@ -1,0 +1,1 @@
+.filters[data-v-ea195843]{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}tr.click[data-v-ea195843]{cursor:pointer}tr.click:hover td[data-v-ea195843],tr.detail td[data-v-ea195843]{background:var(--surface-2)}.warn[data-v-ea195843]{color:var(--saffron-ink)}@media(max-width:860px){.filters[data-v-ea195843]{grid-template-columns:1fr 1fr}}

@@ -20,6 +20,7 @@
   "shift_type",
   "shift_location",
   "is_rest_day",
+  "is_weekly_off",
   "note"
  ],
  "fields": [
@@ -88,10 +89,18 @@
    "idx": 8
   },
   {
+   "fieldname": "is_weekly_off",
+   "fieldtype": "Check",
+   "label": "Is Weekly Off",
+   "in_list_view": 1,
+   "description": "Rest day that falls on the employee's holiday-list weekly off.",
+   "idx": 9
+  },
+  {
    "fieldname": "note",
    "fieldtype": "Data",
    "label": "Note",
-   "idx": 9
+   "idx": 10
   }
  ],
  "permissions": [

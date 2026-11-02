@@ -77,7 +77,7 @@ async function test(e: any) { tHits.value = []; tQ.value = e.employee_name; tRes
     <PageHeader title="Check-in control" subtitle="Who can check in from the ESS portal, from where, and when.">
       <RouterLink to="/hr/checkin-log" class="btn">Check-in audit</RouterLink>
     </PageHeader>
-    <SegmentTabs v-model="tab" :tabs="[{ value: 'policy', label: 'Global policy' }, { value: 'locations', label: 'Locations', count: ov?.counts.locations }, { value: 'overrides', label: 'Employee overrides', count: ov?.counts.overrides }, { value: 'test', label: 'Check an employee' }, { value: 'roster', label: 'Roster rules' }]" />
+    <SegmentTabs v-model="tab" :tabs="[{ value: 'policy', label: 'Global policy' }, { value: 'locations', label: 'Locations', count: ov?.counts.locations }, { value: 'overrides', label: 'Employee overrides', count: ov?.counts.overrides }, { value: 'test', label: 'Check an employee' }, { value: 'roster', label: 'Roster, records & leave' }]" />
     <SkeletonLoader v-if="!ov" :lines="8" />
 
     <template v-else-if="tab === 'policy'">
@@ -211,6 +211,32 @@ async function test(e: any) { tHits.value = []; tQ.value = e.employee_name; tRes
       <ToggleSwitch id="r6" v-model="v.allow_shift_swaps" label="Employees can request swaps with colleagues" :disabled="!editable" />
       <div class="field" style="max-width: 280px"><label for="r7">Notice required (hours)</label><input id="r7" type="number" class="input" v-model.number="v.roster_change_notice_hours" :disabled="!editable" /></div>
       <ToggleSwitch id="r8" v-model="v.roster_notify_on_publish" label="Notify people when their roster is published or changes" :disabled="!editable" />
+      <ToggleSwitch id="r9" v-model="v.roster_auto_weekly_off" label="Mark weekly offs from holiday lists" hint="New rosters, added people, patterns and copies keep each person's weekly offs as rest days." :disabled="!editable" />
+
+      <h2 class="sect">Past roster days</h2>
+      <div class="form-grid">
+        <div class="field"><label for="b1">Allow past-day changes for (days)</label><input id="b1" type="number" min="0" max="366" class="input" v-model.number="v.roster_backdate_days" :disabled="!editable" /><span class="hint">0 turns past-day changes off for everyone.</span></div>
+        <div class="field"><label for="b2">Roles allowed to change past days</label><textarea id="b2" class="textarea" rows="3" v-model="v.roster_backdate_roles" :disabled="!editable" /><span class="hint">One role per line. System Managers and ESS Portal Admins are always allowed; assign "ESS Roster Backdate" to others who need it.</span></div>
+      </div>
+      <p class="small muted">Days with submitted attendance and manual shift assignments are never changed by a past-day publish.</p>
+
+      <h2 class="sect">Check-in records</h2>
+      <ToggleSwitch id="c1" v-model="v.show_own_checkins" label="Employees can see their own check-in records" :disabled="!editable" />
+      <div class="form-grid">
+        <div class="field"><label for="c2">Managers can see check-ins of</label><select id="c2" class="select" v-model="v.manager_checkin_visibility" :disabled="!editable"><option>Direct and indirect reports</option><option>Direct reports only</option><option>None</option></select></div>
+        <div class="field"><label for="c3">Show raw GPS coordinates to</label><select id="c3" class="select" v-model="v.checkin_coordinates_visible_to" :disabled="!editable"><option>HR only</option><option>HR and managers</option></select></div>
+        <div class="field"><label for="c4">Maximum days per query</label><input id="c4" type="number" min="1" max="92" class="input" v-model.number="v.checkin_records_max_days" :disabled="!editable" /></div>
+      </div>
+      <p class="small muted">HR sees records within their HR scope. Records from every channel are shown: portal, attendance devices and Desk.</p>
+
+      <h2 class="sect">Compensatory leave</h2>
+      <ToggleSwitch id="o1" v-model="v.enable_comp_off" label="Employees can request compensatory leave" :disabled="!editable" />
+      <div class="form-grid">
+        <div class="field"><label for="o2">Claim worked days from the last (days)</label><input id="o2" type="number" min="1" max="366" class="input" v-model.number="v.comp_off_window_days" :disabled="!editable" /></div>
+        <div class="field"><label for="o3">Minimum worked hours</label><input id="o3" type="number" min="0" max="24" step="0.5" class="input" v-model.number="v.comp_off_min_hours" :disabled="!editable" /><span class="hint">0 accepts any Present, Work From Home or Half Day attendance.</span></div>
+      </div>
+      <ToggleSwitch id="o4" v-model="v.comp_off_allow_roster_rest_days" label="Roster rest days are eligible" hint="By default thinkNXG HR only accepts holiday-list days; this extends it to published roster rest days." :disabled="!editable" />
+      <p class="small muted">Requests need a Leave Type marked "Is Compensatory" and an active Leave Period. Approvers are the employee's leave approver, or their manager.</p>
       <div class="row" v-if="editable"><button class="btn primary" :disabled="!dirty" @click="savePolicy">{{ t("Save") }}</button></div>
     </section>
 
@@ -294,4 +320,5 @@ tr.off td { opacity: .55; }
 .people { max-height: 180px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); margin-top: 6px; }
 .warn { color: var(--saffron-ink); } .bad { color: var(--pom); }
 h3 { font-size: var(--fs-sm); margin: 10px 0 4px; }
+.sect { font-size: var(--fs-md); margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line); }
 </style>

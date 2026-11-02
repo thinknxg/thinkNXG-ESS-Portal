@@ -12,11 +12,16 @@ POLICY_KEYS = ["enable_checkin", "checkin_policy_mode", "enforce_shift_window", 
                "block_high_risk_checkins", "max_travel_speed_kmh"]
 ROSTER_KEYS = ["enable_roster", "roster_min_rest_hours", "roster_max_consecutive_days", "roster_max_weekly_hours",
                "roster_week_start", "allow_roster_change_requests", "allow_shift_swaps", "roster_change_notice_hours",
-               "roster_notify_on_publish"]
+               "roster_notify_on_publish", "roster_auto_weekly_off", "roster_backdate_days", "roster_backdate_roles",
+               "show_own_checkins", "manager_checkin_visibility", "checkin_coordinates_visible_to",
+               "checkin_records_max_days", "enable_comp_off", "comp_off_window_days", "comp_off_allow_roster_rest_days",
+               "comp_off_min_hours"]
 RANGES = {"default_geofence_radius": (10, 5000), "max_gps_accuracy": (5, 1000), "shift_window_early_minutes": (0, 720),
           "shift_window_late_minutes": (0, 720), "checkin_cooldown_minutes": (0, 120),
           "checkin_rate_limit_per_hour": (5, 500), "max_travel_speed_kmh": (50, 2000), "roster_min_rest_hours": (0, 24),
-          "roster_max_consecutive_days": (0, 31), "roster_max_weekly_hours": (0, 120), "roster_change_notice_hours": (0, 720)}
+          "roster_max_consecutive_days": (0, 31), "roster_max_weekly_hours": (0, 120), "roster_change_notice_hours": (0, 720),
+          "roster_backdate_days": (0, 366), "checkin_records_max_days": (1, 92), "comp_off_window_days": (1, 366),
+          "comp_off_min_hours": (0, 24)}
 
 
 def _viewer():

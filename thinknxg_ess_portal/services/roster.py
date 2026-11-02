@@ -17,7 +17,8 @@ from thinknxg_ess_portal.services.notifications import notify
 
 MAX_DAYS = 63
 WEEK_START = {"Sunday": 6, "Monday": 0, "Saturday": 5}
-ENTRY_FIELDS = ["name", "employee", "employee_name", "date", "shift_type", "shift_location", "is_rest_day", "note"]
+ENTRY_FIELDS = ["name", "employee", "employee_name", "date", "shift_type", "shift_location", "is_rest_day", "is_weekly_off",
+                "note"]
 
 
 # ------------------------------------------------------------------ access
@@ -36,6 +37,40 @@ def scope(user=None):
             return None
         team |= set(hs)
     return team
+
+
+def backdate_days():
+    return max(cint(identity.settings().get("roster_backdate_days")), 0)
+
+
+def can_backdate(user=None):
+    """Past roster days may be changed by System Managers, ESS Portal Admins and the roles listed in settings."""
+    user = user or frappe.session.user
+    if not backdate_days():
+        return False
+    if identity.is_admin(user):
+        return True
+    allowed = {r.strip() for r in (identity.settings().get("roster_backdate_roles") or "").replace(",", "\n").split("\n")
+               if r.strip()}
+    return bool(identity.roles(user) & allowed)
+
+
+def backdate_from():
+    return add_days(getdate(today()), -backdate_days())
+
+
+def is_locked(doc, d, user=None):
+    """Past days of a published roster are locked unless the user may backdate and the day is within the window."""
+    d = getdate(d)
+    if doc.status != "Published" or d >= getdate(today()):
+        return False
+    return not (can_backdate(user) and d >= backdate_from())
+
+
+def weekly_offs(employees, start, end):
+    """{employee: set(dates)} of holiday-list weekly offs."""
+    hol = shifts.holidays_for(list(employees), start, end)
+    return {e: {d for d, h in days.items() if h.get("weekly_off")} for e, days in hol.items()}
 
 
 def assert_employees(employees, user=None):
@@ -72,9 +107,10 @@ def _bulk_insert(roster, rows):
     now = now_datetime()
     user = frappe.session.user
     fields = ["name", "creation", "modified", "owner", "modified_by", "docstatus", "idx", "roster", "employee",
-              "employee_name", "date", "shift_type", "shift_location", "is_rest_day", "note"]
+              "employee_name", "date", "shift_type", "shift_location", "is_rest_day", "is_weekly_off", "note"]
     values = [(frappe.generate_hash(length=12), now, now, user, user, 0, 0, roster, r["employee"], r.get("employee_name"),
-               r["date"], r.get("shift_type"), r.get("shift_location"), cint(r.get("is_rest_day")), r.get("note"))
+               r["date"], r.get("shift_type"), r.get("shift_location"), cint(r.get("is_rest_day")),
+               cint(r.get("is_weekly_off")) if cint(r.get("is_rest_day")) else 0, r.get("note"))
               for r in rows]
     frappe.db.bulk_insert("ESS Roster Entry", fields, values, ignore_duplicates=True)
 
@@ -84,16 +120,19 @@ def _prefill_rows(employees, start, end, mode):
                                 as_list=True))
     rows = []
     sched = shifts.plan(employees, start, end, with_context=True) if mode == "current" else {}
+    wo = weekly_offs(employees, start, end) if cint(identity.settings().get("roster_auto_weekly_off")) else {}
     for emp in employees:
         days = {d["date"]: d for d in sched.get(emp, [])}
         for d in shiftwin.day_range(getdate(start), getdate(end)):
             row = {"employee": emp, "employee_name": names.get(emp), "date": d}
             day = days.get(d)
-            if day:
+            if d in wo.get(emp, set()):
+                row.update(is_rest_day=1, is_weekly_off=1)
+            elif day:
                 if day["windows"]:
                     row.update(shift_type=day["windows"][0]["shift_type"], shift_location=day["windows"][0]["location"])
                 elif day["rest_day"] or (day["holiday"] and day["holiday"]["weekly_off"]):
-                    row["is_rest_day"] = 1
+                    row.update(is_rest_day=1, is_weekly_off=1 if day["holiday"] and day["holiday"]["weekly_off"] else 0)
             rows.append(row)
     return rows
 
@@ -104,7 +143,16 @@ def create(title, from_date, to_date, employees=None, department=None, branch=No
     fd, td = getdate(from_date), getdate(to_date)
     if td < fd or date_diff(td, fd) >= MAX_DAYS:
         frappe.throw(_("Choose a period of 1 to {0} days.").format(MAX_DAYS))
-    employees = list(dict.fromkeys(employees or identity.team_employees()))
+    if not employees:
+        flt = {"status": "Active", "name": ["in", sorted(scope() or identity.team_employees()) or [""]]}
+        if scope() is None:
+            flt.pop("name")
+        if department:
+            flt["department"] = department
+        if branch:
+            flt["branch"] = branch
+        employees = frappe.get_all("Employee", filters=flt, pluck="name", limit=500)
+    employees = list(dict.fromkeys(employees))
     if not employees:
         frappe.throw(_("Choose at least one employee."))
     assert_employees(employees)
@@ -141,7 +189,7 @@ def save_cells(name, cells):
     members = set(roster_employees(name))
     valid_types = set(frappe.get_all("Shift Type", pluck="name"))
     valid_locs = set(frappe.get_all("Shift Location", pluck="name")) if frappe.db.exists("DocType", "Shift Location") else set()
-    fd, td, lock = getdate(doc.from_date), getdate(doc.to_date), getdate(today())
+    fd, td = getdate(doc.from_date), getdate(doc.to_date)
     keyed = []
     for c in cells:
         emp, d = c.get("employee"), getdate(c.get("date"))
@@ -157,17 +205,21 @@ def save_cells(name, cells):
             frappe.throw(_("Unknown shift location {0}.").format(loc))
         keyed.append((emp, d, st, loc, 1 if c.get("rest") and not st else 0, (c.get("note") or "")[:140] or None))
     existing = _entry_map(name, {k[0] for k in keyed})
-    saved = locked = 0
+    wo = weekly_offs({k[0] for k in keyed}, fd, td) if keyed else {}
+    saved = locked = past = 0
     new_rows = []
+    backdate = can_backdate()
     for emp, d, st, loc, rest, note in keyed:
-        if doc.status == "Published" and d < lock:
+        if is_locked(doc, d):
             locked += 1
             continue
+        past += 1 if doc.status == "Published" and d < getdate(today()) else 0
         e = existing.get((emp, d))
-        values = {"shift_type": st, "shift_location": loc if st else None, "is_rest_day": rest, "note": note}
+        values = {"shift_type": st, "shift_location": loc if st else None, "is_rest_day": rest,
+                  "is_weekly_off": 1 if rest and d in wo.get(emp, set()) else 0, "note": note}
         if e:
-            if (e.shift_type, e.shift_location if e.shift_type else None, cint(e.is_rest_day), e.note) != (
-                    st, values["shift_location"], rest, note):
+            if (e.shift_type, e.shift_location if e.shift_type else None, cint(e.is_rest_day), cint(e.is_weekly_off), e.note) != (
+                    st, values["shift_location"], rest, values["is_weekly_off"], note):
                 frappe.db.set_value("ESS Roster Entry", e.name, values)
                 saved += 1
         else:
@@ -181,7 +233,30 @@ def save_cells(name, cells):
         _bulk_insert(name, new_rows)
     if saved and doc.status == "Published":
         doc.db_set("has_unpublished_changes", 1, update_modified=False)
-    return {"saved": saved, "locked": locked}
+    if past and backdate:
+        log_event("Roster", doc.doctype, doc.name, details=f"{past} past day(s) edited (backdate window {backdate_days()} days)")
+    return {"saved": saved, "locked": locked, "past_edited": past}
+
+
+def mark_weekly_offs(name, employees=None, overwrite=False):
+    """Set holiday-list weekly offs as rest days. Without overwrite, days that already have a shift are kept."""
+    doc = get_roster(name)
+    emps = [e for e in (employees or roster_employees(name)) if e]
+    wo = weekly_offs(emps, doc.from_date, doc.to_date)
+    current = _entry_map(name, emps)
+    cells, kept = [], 0
+    for emp in emps:
+        for d in sorted(wo.get(emp, set())):
+            e = current.get((emp, d))
+            if e and e.shift_type and not overwrite:
+                kept += 1
+                continue
+            if e and cint(e.is_rest_day) and cint(e.is_weekly_off):
+                continue
+            cells.append({"employee": emp, "date": d, "rest": 1, "note": e.note if e else None})
+    out = save_cells(name, cells) if cells else {"saved": 0, "locked": 0}
+    out["kept_shifts"] = kept
+    return out
 
 
 def add_employees(name, employees, prefill="current"):
@@ -206,7 +281,8 @@ def remove_employee(name, employee):
     return {"removed": employee}
 
 
-def apply_pattern(name, pattern, employees, start_date=None, end_date=None, stagger=0, shift_location=None):
+def apply_pattern(name, pattern, employees, start_date=None, end_date=None, stagger=0, shift_location=None,
+                  keep_weekly_offs=True):
     doc = get_roster(name)
     pat = frappe.get_doc("ESS Shift Pattern", pattern)
     steps = [None if row.is_rest_day else row.shift_type for row in pat.steps]
@@ -214,14 +290,17 @@ def apply_pattern(name, pattern, employees, start_date=None, end_date=None, stag
     td = min(getdate(end_date or doc.to_date), getdate(doc.to_date))
     dates = list(shiftwin.day_range(fd, td))
     cells = []
+    wo = weekly_offs(employees or [], fd, td) if cint(keep_weekly_offs) else {}
     for i, emp in enumerate(employees or []):
         mapping = roster_rules.pattern_for(dates, steps, offset=i * cint(stagger))
         for d, st in mapping.items():
+            if d in wo.get(emp, set()):
+                st = None
             cells.append({"employee": emp, "date": d, "shift_type": st, "rest": st is None, "shift_location": shift_location})
     return save_cells(name, cells)
 
 
-def copy_period(name, source):
+def copy_period(name, source, keep_weekly_offs=True):
     """Fill this roster from another, repeating the source's whole weeks so weekdays line up."""
     doc = get_roster(name)
     src = get_roster(source)
@@ -237,7 +316,10 @@ def copy_period(name, source):
             if e:
                 cells.append({"employee": emp, "date": d, "shift_type": e.shift_type, "shift_location": e.shift_location,
                               "rest": cint(e.is_rest_day)})
-    return save_cells(name, cells)
+    out = save_cells(name, cells)
+    if cint(keep_weekly_offs):
+        mark_weekly_offs(name, overwrite=True)
+    return out
 
 
 def set_requirements(name, rows):
@@ -282,6 +364,16 @@ def validate(doc, entries=None):
             conflicts.append({"employee": e.employee, "date": str(d), "kind": "leave", "severity": "warning",
                               "message": _("{0} has {1} leave ({2}) on {3}.").format(names[e.employee], leave["status"].lower(),
                                                                                     leave["leave_type"], d)})
+    wo = weekly_offs(sorted(names), doc.from_date, doc.to_date) if names else {}
+    on_wo = defaultdict(list)
+    for e in entries:
+        if e.shift_type and not cint(e.is_rest_day) and getdate(e.date) in wo.get(e.employee, set()):
+            on_wo[e.employee].append(getdate(e.date))
+    for emp, ds in on_wo.items():
+        conflicts.append({"employee": emp, "date": str(ds[0]), "kind": "weekly_off_shift", "severity": "info",
+                          "message": _("{0} is planned on {1} weekly off(s): {2}. Once attendance is marked they can "
+                                       "claim compensatory leave.").format(names[emp], len(ds),
+                                                                         ", ".join(d.strftime("%a %d %b") for d in ds[:4]))})
     start = max(getdate(doc.from_date), getdate(today()))
     unplanned = sum(1 for e in entries if getdate(e.date) >= start and not e.shift_type and not cint(e.is_rest_day))
     if unplanned:
@@ -330,12 +422,12 @@ def grid(name):
     entries = list(_entry_map(name).values())
     emps = sorted({e.employee for e in entries})
     info = {r.name: r for r in frappe.get_all("Employee", filters={"name": ["in", emps or [""]]},
-                                              fields=["name", "employee_name", "designation", "department", "default_shift",
-                                                      "image"])}
+                                              fields=["name", "employee_name", "designation", "department", "branch",
+                                                      "default_shift", "image"])}
     cells = defaultdict(dict)
     for e in entries:
         cells[e.employee][str(getdate(e.date))] = {"s": e.shift_type, "l": e.shift_location, "r": cint(e.is_rest_day),
-                                                    "n": e.note}
+                                                    "w": cint(e.is_weekly_off), "n": e.note}
     hol = shifts.holidays_for(emps, doc.from_date, doc.to_date)
     lv = shifts.leaves(emps, doc.from_date, doc.to_date)
     used = {e.shift_type for e in entries if e.shift_type} | {r.shift_type for r in doc.requirements}
@@ -354,6 +446,8 @@ def grid(name):
         "employees": [{"name": e, "employee_name": info[e].employee_name if e in info else e,
                        "designation": info[e].designation if e in info else None,
                        "default_shift": info[e].default_shift if e in info else None,
+                       "department": info[e].department if e in info else None,
+                       "branch": info[e].branch if e in info else None,
                        "image": info[e].image if e in info else None} for e in sorted(emps, key=lambda x: (info[x].employee_name if x in info else x))],
         "dates": [str(d) for d in shiftwin.day_range(getdate(doc.from_date), getdate(doc.to_date))],
         "cells": cells,
@@ -362,6 +456,8 @@ def grid(name):
         "shift_types": types, "used_shift_types": sorted(used), "patterns": patterns, "locations": locations,
         "today": str(getdate(today())), "pending_requests": pending,
         "can_trim_manual": identity.is_hr(), "validation": validate(doc, entries),
+        "can_backdate": can_backdate(), "backdate_from": str(backdate_from()) if can_backdate() else None,
+        "auto_weekly_off": bool(cint(identity.settings().get("roster_auto_weekly_off"))),
         "weekend_days": [x.strip() for x in (identity.settings().get("weekend_days") or "").split(",") if x.strip()],
     }
 
@@ -427,11 +523,101 @@ def _digest(entries):
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
-def publish(name, trim_manual=False):
+def publish(name, trim_manual=False, backfill=False):
     doc = get_roster(name)
     if trim_manual and not identity.is_hr():
         frappe.throw(_("Only HR can trim manual shift assignments."), frappe.PermissionError)
-    return _publish(doc, trim_manual=bool(cint(trim_manual)))
+    if cint(backfill) and not can_backdate():
+        frappe.throw(_("You aren't allowed to change past roster days."), frappe.PermissionError)
+    report = _publish(doc, trim_manual=bool(cint(trim_manual)))
+    if cint(backfill):
+        report["past"] = _backfill(doc)
+    return report
+
+
+def _carve(emp, company, a, b):
+    """Free [a, b] of roster-made assignments, keeping their parts before a and after b."""
+    ended = cancelled = 0
+    loc = "shift_location" if _assignment_meta().has_field("shift_location") else "null"
+    for g in frappe.db.sql(f"""select name, shift_type, start_date, end_date, ess_roster, {loc} as shift_location
+            from `tabShift Assignment` where employee=%s and docstatus=1 and status='Active' and ifnull(ess_roster,'')!=''
+              and start_date<=%s and (end_date is null or end_date>=%s)""", (emp, b, a), as_dict=True):
+        tail_end = g.end_date
+        if getdate(g.start_date) < getdate(a):
+            _end_assignment(g.name, add_days(a, -1))
+            ended += 1
+        else:
+            _cancel_assignment(g.name)
+            cancelled += 1
+        if tail_end is None or getdate(tail_end) > getdate(b):
+            _create_assignment(emp, company, g.shift_type, g.shift_location, add_days(b, 1), tail_end, g.ess_roster)
+    return ended, cancelled
+
+
+def _backfill(doc):
+    """Apply past roster days within the backdate window.
+
+    Days with submitted attendance are never touched; manual (untagged) assignments are never changed.
+    Unplanned past cells are ignored, so this only fills or corrects days the planner actually set.
+    """
+    out = {"from": None, "to": None, "created": 0, "ended": 0, "cancelled": 0, "unchanged": 0,
+           "skipped_attendance": 0, "skipped_manual": [], "errors": []}
+    a = max(getdate(doc.from_date), backdate_from())
+    b = min(getdate(doc.to_date), add_days(getdate(today()), -1))
+    if a > b:
+        return out
+    out.update({"from": str(a), "to": str(b)})
+    entries = frappe.get_all("ESS Roster Entry", filters={"roster": doc.name, "date": ["between", [a, b]]},
+                             fields=ENTRY_FIELDS)
+    by_emp = defaultdict(list)
+    for e in entries:
+        if e.shift_type or cint(e.is_rest_day):
+            by_emp[e.employee].append(e)
+    companies = dict(frappe.get_all("Employee", filters={"name": ["in", list(by_emp) or [""]]},
+                                    fields=["name", "company"], as_list=True))
+    loc = "shift_location" if _assignment_meta().has_field("shift_location") else "null"
+    for emp, rows in by_emp.items():
+        marked = {getdate(x) for x in frappe.get_all("Attendance", filters={"employee": emp, "docstatus": 1,
+                                                                            "attendance_date": ["between", [a, b]]},
+                                                     pluck="attendance_date")}
+        out["skipped_attendance"] += sum(1 for r in rows if getdate(r.date) in marked)
+        keyed = [(getdate(r.date), (r.shift_type, r.shift_location or "") if r.shift_type and not cint(r.is_rest_day) else None)
+                 for r in rows]
+        for seg in roster_rules.segments(keyed, blocked=marked):
+            frappe.db.savepoint("ess_roster_backfill")
+            try:
+                existing = frappe.db.sql(f"""select name, shift_type, ifnull(ess_roster,'') ess_roster, {loc} as shift_location,
+                        start_date, end_date from `tabShift Assignment`
+                    where employee=%s and docstatus=1 and status='Active' and start_date<=%s
+                      and (end_date is null or end_date>=%s)""", (emp, seg["end"], seg["start"]), as_dict=True)
+                manual = [x for x in existing if not x.ess_roster]
+                if manual:
+                    out["skipped_manual"].append({"employee": emp, "from": str(seg["start"]), "to": str(seg["end"]),
+                                                  "assignments": [m.name for m in manual]})
+                    continue
+                key = seg["key"]
+                covers = (len(existing) == 1 and key and existing[0].shift_type == key[0]
+                          and (existing[0].shift_location or "") == key[1]
+                          and getdate(existing[0].start_date) <= seg["start"]
+                          and (not existing[0].end_date or getdate(existing[0].end_date) >= seg["end"]))
+                if covers or (key is None and not existing):
+                    out["unchanged"] += 1
+                    continue
+                ended, cancelled = _carve(emp, companies.get(emp), seg["start"], seg["end"])
+                out["ended"] += ended
+                out["cancelled"] += cancelled
+                if key:
+                    _create_assignment(emp, companies.get(emp), key[0], key[1] or None, seg["start"], seg["end"], doc.name)
+                    out["created"] += 1
+            except Exception as ex:
+                frappe.db.rollback(save_point="ess_roster_backfill")
+                frappe.local.message_log = []
+                out["errors"].append({"employee": emp, "from": str(seg["start"]), "error": str(ex)[:300]})
+    log_event("Roster", doc.doctype, doc.name,
+              details=f"past days {out['from']}..{out['to']} created={out['created']} ended={out['ended']} "
+                      f"cancelled={out['cancelled']} skipped_attendance={out['skipped_attendance']} "
+                      f"skipped_manual={len(out['skipped_manual'])} errors={len(out['errors'])}")
+    return out
 
 
 def _publish(doc, trim_manual=False, employees=None, window=None, notify_people=True):

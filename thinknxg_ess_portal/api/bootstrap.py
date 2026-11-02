@@ -13,6 +13,8 @@ def _capabilities(emp):
     from thinknxg_ess_portal.services import checkin_policy, roster
     caps["modules"]["checkin"] = bool(emp) and bool(caps["modules"].get("attendance")) and checkin_policy.resolve(emp.name).enabled
     caps["planner"] = bool(caps["modules"].get("roster")) and roster.can_plan()
+    from thinknxg_ess_portal.api.checkin_records import visible_employees
+    caps["team_checkins"] = visible_employees()[2] != "none"
     return caps
 
 

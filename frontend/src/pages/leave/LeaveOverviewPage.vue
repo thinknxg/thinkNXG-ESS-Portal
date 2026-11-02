@@ -4,6 +4,7 @@ import { invalidate } from "@/composables/useResource";
 import { Leave } from "@/services/endpoints";
 import { fmtDate, t } from "@/i18n";
 import { useUi } from "@/stores/ui";
+import { useSession } from "@/stores/session";
 import { ref } from "vue";
 import PageHeader from "@/components/ui/PageHeader.vue";
 import StatusBadge from "@/components/ui/StatusBadge.vue";
@@ -13,6 +14,7 @@ import EmptyState from "@/components/ui/EmptyState.vue";
 import ConfirmActionDialog from "@/components/ui/ConfirmActionDialog.vue";
 
 const ui = useUi();
+const s = useSession();
 const { data, balances, loading, error, reload } = useLeaveBalance();
 const withdrawing = ref<any>(null);
 async function withdraw() {
@@ -25,6 +27,7 @@ async function withdraw() {
   <div class="page">
     <PageHeader :title="t('Leave')" :subtitle="data?.approver ? `Requests go to ${data.approver.name} for approval.` : undefined">
       <RouterLink to="/leave/calendar" class="btn">{{ t("Leave calendar") }}</RouterLink>
+      <RouterLink v-if="s.module('comp_off')" to="/leave/comp-off" class="btn">{{ t("Compensatory leave") }}</RouterLink>
       <RouterLink to="/leave/apply" class="btn primary">{{ t("Apply for leave") }}</RouterLink>
     </PageHeader>
     <ErrorState :error="error" @retry="reload" />

@@ -44,6 +44,12 @@ def _collect(emp):
                             fields=["name", "request_type", "from_date", "status"]):
         items.append(_i(f"rcr:{r.name}", "roster_change_pending", _("{0}: {1}").format(_(r.request_type), _(r.status)),
                         "pending", r.from_date, "/ess/roster", r.name, priority="low"))
+    if frappe.get_meta("Compensatory Leave Request").has_field("ess_status"):
+        for r in frappe.get_all("Compensatory Leave Request", filters={"employee": emp.name, "docstatus": 0,
+                                                                       "ess_status": ["!=", "Rejected"]},
+                                fields=["name", "work_from_date"]):
+            items.append(_i(f"clr:{r.name}", "comp_off_pending", _("Compensatory leave awaiting approval"), "pending",
+                            r.work_from_date, "/ess/leave/comp-off", r.name, priority="low"))
     from thinknxg_ess_portal.api.policies import _pending_for
     for p in _pending_for(emp):
         items.append(_i(f"policy:{p['name']}", "policy_ack", _("Acknowledge policy: {0}").format(p["policy_title"]),

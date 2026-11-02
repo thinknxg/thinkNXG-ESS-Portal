@@ -134,16 +134,20 @@ def _planner():
 
 
 @frappe.whitelist(methods=["GET"])
-def list_rosters(status=None):
+def list_rosters(status=None, department=None, branch=None):
     _planner()
     flt = {}
     if status:
         flt["status"] = status
+    if department:
+        flt["department"] = department
+    if branch:
+        flt["branch"] = branch
     if not identity.is_hr_manager():
         flt["planner"] = frappe.session.user
     rows = frappe.get_all("ESS Roster", filters=flt, order_by="from_date desc", limit=100,
                           fields=["name", "title", "from_date", "to_date", "status", "version", "has_unpublished_changes",
-                                  "published_on", "department", "planner", "modified"])
+                                  "published_on", "department", "branch", "planner", "modified"])
     for r in rows:
         r["employees"] = len(roster.roster_employees(r.name))
         r["pending_requests"] = frappe.db.count("ESS Roster Change Request", {"roster": r.name,
@@ -152,14 +156,18 @@ def list_rosters(status=None):
 
 
 @frappe.whitelist(methods=["GET"])
-def team_members():
+def team_members(department=None, branch=None):
     _planner()
     sc = roster.scope()
     flt = {"status": "Active"}
     if sc is not None:
         flt["name"] = ["in", list(sc) or [""]]
-    return frappe.get_all("Employee", filters=flt, fields=["name", "employee_name", "designation", "department", "image"],
-                          order_by="employee_name asc", limit=500)
+    if department:
+        flt["department"] = department
+    if branch:
+        flt["branch"] = branch
+    return frappe.get_all("Employee", filters=flt, fields=["name", "employee_name", "designation", "department", "branch",
+                                                           "image"], order_by="employee_name asc", limit=1000)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -196,17 +204,26 @@ def remove_employee(name, employee):
 
 
 @frappe.whitelist(methods=["POST"])
-def apply_pattern(name, pattern, employees, start_date=None, end_date=None, stagger=0, shift_location=None):
+def apply_pattern(name, pattern, employees, start_date=None, end_date=None, stagger=0, shift_location=None,
+                  keep_weekly_offs=1):
     _planner()
-    roster.apply_pattern(name, pattern, parse(employees, []), start_date, end_date, stagger, shift_location)
+    roster.apply_pattern(name, pattern, parse(employees, []), start_date, end_date, stagger, shift_location,
+                         cint(keep_weekly_offs))
     return roster.grid(name)
 
 
 @frappe.whitelist(methods=["POST"])
-def copy_from(name, source):
+def copy_from(name, source, keep_weekly_offs=1):
     _planner()
-    roster.copy_period(name, source)
+    roster.copy_period(name, source, cint(keep_weekly_offs))
     return roster.grid(name)
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_weekly_offs(name, employees=None, overwrite=0):
+    _planner()
+    out = roster.mark_weekly_offs(name, parse(employees, None), bool(cint(overwrite)))
+    return {**out, "grid": roster.grid(name)}
 
 
 @frappe.whitelist(methods=["POST"])
@@ -223,9 +240,9 @@ def validate_roster(name):
 
 
 @frappe.whitelist(methods=["POST"])
-def publish(name, trim_manual=0):
+def publish(name, trim_manual=0, backfill=0):
     _planner()
-    return roster.publish(name, trim_manual)
+    return roster.publish(name, trim_manual, backfill)
 
 
 @frappe.whitelist(methods=["POST"])

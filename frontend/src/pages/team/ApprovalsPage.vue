@@ -35,7 +35,7 @@ const delOpen = ref(false);
 const del = ref<any>({ delegate: null, from_date: "", to_date: "", include_leave: 1, include_expense: 1, include_attendance: 1, reason: "" });
 const delQ = ref(""); const delPeople = ref<any[]>([]);
 
-const LABEL: Record<string, string> = { leave: "Leave", expense: "Expenses", attendance: "Attendance", shift: "Shifts", roster: "Roster changes", profile: "Profile updates", document: "Documents" };
+const LABEL: Record<string, string> = { leave: "Leave", expense: "Expenses", attendance: "Attendance", shift: "Shifts", roster: "Roster changes", comp_off: "Compensatory leave", profile: "Profile updates", document: "Documents" };
 const tabs = computed(() => [{ value: "all", label: t("All"), count: items.value.length },
   ...Object.entries(data.value?.counts || {}).map(([k, n]) => ({ value: k, label: LABEL[k] || k, count: n as number }))]);
 const shown = computed(() => items.value.filter((i) => type.value === "all" || i.type === type.value));

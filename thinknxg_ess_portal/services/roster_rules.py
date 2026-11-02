@@ -93,6 +93,21 @@ def runs(entries):
     return out
 
 
+def segments(entries, blocked=()):
+    """Contiguous runs of the same key, INCLUDING rest (key None), split at blocked dates.
+    entries: [(date, key)]; blocked: dates that must not be touched (e.g. attendance already marked)."""
+    blocked = set(blocked)
+    out = []
+    for d, key in sorted(entries, key=lambda x: x[0]):
+        if d in blocked:
+            continue
+        if out and out[-1]["key"] == key and (d - out[-1]["end"]).days == 1:
+            out[-1]["end"] = d
+        else:
+            out.append({"key": key, "start": d, "end": d})
+    return out
+
+
 def pattern_for(dates, steps, offset=0):
     """Map each date to a pattern step, cycling. steps: list of shift_type or None (rest)."""
     if not steps:

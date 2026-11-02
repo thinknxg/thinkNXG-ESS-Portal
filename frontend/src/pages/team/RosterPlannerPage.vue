@@ -199,6 +199,21 @@ async function applyWeeklyOffs() {
     ui.toast(`${r.saved} weekly off(s) marked${r.kept_shifts ? `, ${r.kept_shifts} planned shift(s) kept` : ""}${r.locked ? `, ${r.locked} locked past day(s) skipped` : ""}`);
   } catch (e: any) { ui.toast(e.message, "error"); } finally { busy.value = false; }
 }
+const restFrom = ref(""); const restTo = ref("");
+function applyRestPeriod() {
+  const people = woScope.value === "all" ? allEmps.value.map((e: any) => e.name) : woScope.value === "selected" ? selectedRows.value : emps.value.map((e: any) => e.name);
+  const days = dates.value.filter((d) => d >= restFrom.value && d <= restTo.value && !locked(d));
+  if (!restFrom.value || !restTo.value || restTo.value < restFrom.value) { ui.toast("Choose a start and end date.", "error"); return; }
+  for (const e of people) for (const d of days) {
+    const cur = cell(e, d);
+    if (!g.value.cells[e]) g.value.cells[e] = {};
+    g.value.cells[e][d] = { ...(cur || {}), s: null, l: null, r: 1, w: isWO(e, d) ? 1 : 0 };
+    pending.set(`${e}|${d}`, { employee: e, date: d, shift_type: null, shift_location: null, rest: 1, note: cur?.n || null });
+  }
+  woOpen.value = false;
+  ui.toast(`Rest days set for ${people.length} person(s), ${days.length} day(s) each`);
+  flush();
+}
 async function doAdd() { busy.value = true; try { await Roster.addEmployees(name, toAdd.value); addOpen.value = false; await load(); } catch (e: any) { ui.toast(e.message, "error"); } finally { busy.value = false; } }
 async function removeRow(e: any) { if (!confirm(`Remove ${e.employee_name} from this roster?`)) return; await Roster.removeEmployee(name, e.name); await load(); }
 async function archive() { if (!confirm("Archive this roster? Published shift assignments stay in thinkNXG HR.")) return; await Roster.archive(name); await load(); }
@@ -305,7 +320,7 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
 
       <AccessibleDialog :open="pubOpen" :title="g.roster.status === 'Published' ? 'Republish roster' : 'Publish roster'" wide @close="pubOpen = false">
         <div class="stack" v-if="!report">
-          <p>Publishing writes thinkNXG HR Shift Assignments for <strong>{{ fmtDate(g.today > g.roster.from_date ? g.today : g.roster.from_date) }}</strong> to <strong>{{ fmtDate(g.roster.to_date) }}</strong>. Past days are never changed. Rest days get no assignment.</p>
+          <p>Publishing writes thinkNXG HR Shift Assignments for <strong>{{ fmtDate(g.today > g.roster.from_date ? g.today : g.roster.from_date) }}</strong> to <strong>{{ fmtDate(g.roster.to_date) }}</strong>. Past days are never changed. <template v-if="g.rest_as_weekly_off">Rest days become Weekly Off shift assignments and are added to each person's holiday list as "Weekly Off".</template><template v-else>Rest days get no assignment.</template></p>
           <p class="small muted">{{ g.validation.summary.warnings }} warning(s) and {{ g.validation.summary.gaps }} coverage gap(s) won't stop publishing.</p>
           <div v-if="blockers.length" class="block">
             <p><strong>{{ blockers.length }} manual shift assignment(s) overlap this roster.</strong> Those people are skipped unless HR trims the manual assignments.</p>
@@ -321,6 +336,13 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
         <div v-else class="stack">
           <dl class="rep"><div><dt>Assignments created</dt><dd>{{ report.created }}</dd></div><div><dt>Ended</dt><dd>{{ report.ended }}</dd></div><div><dt>Replaced</dt><dd>{{ report.cancelled }}</dd></div><div><dt>People notified</dt><dd>{{ report.notified }}</dd></div></dl>
           <p v-if="report.conflicts.length" class="warn small">{{ report.conflicts.length }} person(s) skipped because of manual shift assignments.</p>
+          <template v-if="report.weekly_off && report.weekly_off.assignments">
+            <h3>Holiday lists</h3>
+            <dl class="rep"><div><dt>Weekly offs added</dt><dd>{{ report.weekly_off.added }}</dd></div><div><dt>Removed</dt><dd>{{ report.weekly_off.removed }}</dd></div>
+              <div><dt>Already holidays</dt><dd>{{ report.weekly_off.existing }}</dd></div><div><dt>Personal lists created</dt><dd>{{ report.weekly_off.personal_lists.length }}</dd></div></dl>
+            <p v-if="report.weekly_off.personal_lists.length" class="small muted">Shared holiday lists weren't changed. {{ report.weekly_off.personal_lists.map((p: any) => p.holiday_list).join(", ") }} now hold these people's weekly offs and follow the shared lists.</p>
+            <ul v-if="report.weekly_off.notes.length" class="small warn"><li v-for="n in report.weekly_off.notes" :key="n">{{ n }}</li></ul>
+          </template>
           <ul v-if="report.errors.length" class="small bad"><li v-for="er in report.errors" :key="er.employee">{{ er.employee }}: {{ er.error }}</li></ul>
           <template v-if="report.past && report.past.from">
             <h3>Past days ({{ fmtDate(report.past.from, { day: "numeric", month: "short" }) }} – {{ fmtDate(report.past.to, { day: "numeric", month: "short" }) }})</h3>
@@ -388,6 +410,13 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
             <option value="shown">People shown ({{ emps.length }})</option><option value="selected" :disabled="!selectedRows.length">Selected people ({{ selectedRows.length }})</option><option value="all">Everyone on this roster ({{ allEmps.length }})</option></select></div>
           <label class="check"><input type="checkbox" v-model="woOverwrite" />Replace shifts already planned on weekly offs</label>
           <p class="small muted">Leave this off to keep people you've deliberately scheduled on their day off; they can claim compensatory leave once attendance is marked.</p>
+          <div class="restp">
+            <h3>Or set a rest period</h3>
+            <p class="small muted">Marks every day from the start to the end date as a rest day for the same people.<template v-if="g.rest_as_weekly_off"> On publishing, the period becomes a Weekly Off shift assignment and is added to their holiday lists.</template></p>
+            <div class="row wrap"><input type="date" class="input" v-model="restFrom" :min="g.roster.from_date" :max="g.roster.to_date" aria-label="Rest period start" />
+              <span class="muted">–</span><input type="date" class="input" v-model="restTo" :min="restFrom || g.roster.from_date" :max="g.roster.to_date" aria-label="Rest period end" />
+              <button class="btn" :disabled="!restFrom || !restTo" @click="applyRestPeriod">Set rest period</button></div>
+          </div>
         </div>
         <template #footer><button class="btn" @click="woOpen = false">{{ t("Cancel") }}</button><button class="btn primary" :disabled="busy" @click="applyWeeklyOffs">Mark weekly offs</button></template>
       </AccessibleDialog>
@@ -416,6 +445,8 @@ function goTo(emp?: string, d?: string) { if (!emp || !d) return; const r = emps
 .past-toggle { margin-inline-start: auto; padding: 4px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .past-toggle.on { border-color: var(--saffron); background: var(--saffron-soft); color: var(--saffron-ink); }
 .pastbox { padding: 12px 14px; border-radius: 10px; background: var(--saffron-soft); }
+.restp { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 6px; }
+.restp .input { width: auto; }
 .grid thead th.pastedit { background: var(--saffron-soft); opacity: 1; }
 .cell.pastedit { background: color-mix(in srgb, var(--saffron-soft) 60%, transparent); }
 .empty.wohint { color: var(--ink-3); font-size: 11px; font-weight: 600; }

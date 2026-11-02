@@ -48,6 +48,7 @@ def after_install():
 def after_migrate():
     _roles()
     _custom_fields()
+    _weekly_off_type()
     _settings()
     _seed()
     frappe.db.commit()
@@ -72,11 +73,36 @@ def _custom_fields():
             {"fieldname": "ess_roster", "label": "ESS Roster", "fieldtype": "Link", "options": "ESS Roster",
              "insert_after": "shift_type", "read_only": 1, "in_standard_filter": 1, "search_index": 1,
              "description": "Set when this assignment was created by publishing an ESS roster."},
+            {"fieldname": "ess_weekly_off", "label": "Weekly Off / Rest Day", "fieldtype": "Check",
+             "insert_after": "ess_roster", "in_standard_filter": 1,
+             "description": "Every date from Start Date to End Date is added to the employee's holiday list as "
+                            "\"Weekly Off\". Uses the Weekly Off shift type from ESS Portal Settings."},
+            {"fieldname": "ess_holiday_lists", "label": "Holiday List Entries", "fieldtype": "Small Text",
+             "insert_after": "ess_weekly_off", "read_only": 1, "no_copy": 1, "depends_on": "ess_weekly_off"},
         ],
         "Shift Type": [
             {"fieldname": "ess_code", "label": "ESS Short Code", "fieldtype": "Data", "length": 3,
              "insert_after": "end_time", "description": "1-3 characters shown on roster grids, e.g. G, E, N."},
             {"fieldname": "ess_color", "label": "ESS Roster Colour", "fieldtype": "Color", "insert_after": "ess_code"},
+            {"fieldname": "ess_weekly_off", "label": "Weekly Off / Rest Day", "fieldtype": "Check",
+             "insert_after": "ess_color",
+             "description": "Assignments of this shift type are days off: their dates are added to the employee's "
+                            "holiday list as \"Weekly Off\"."},
+        ],
+        # Rows written by weekly-off Shift Assignments carry the assignment's name, so only they are ever removed.
+        # Data rather than Link: rows must stay saveable after their assignment is cancelled or deleted.
+        "Holiday": [
+            {"fieldname": "ess_shift_assignment", "label": "ESS Shift Assignment", "fieldtype": "Data",
+             "insert_after": "weekly_off", "read_only": 1, "no_copy": 1, "search_index": 1},
+            {"fieldname": "ess_from_base", "label": "Copied from shared list", "fieldtype": "Check",
+             "insert_after": "ess_shift_assignment", "read_only": 1, "hidden": 1},
+        ],
+        "Holiday List": [
+            {"fieldname": "ess_employee", "label": "ESS Personal List For", "fieldtype": "Link", "options": "Employee",
+             "insert_after": "to_date", "read_only": 1, "no_copy": 1, "search_index": 1},
+            {"fieldname": "ess_base_holiday_list", "label": "ESS Copied From", "fieldtype": "Link",
+             "options": "Holiday List", "insert_after": "ess_employee", "read_only": 1, "no_copy": 1,
+             "description": "Holidays from this list are kept in step automatically."},
         ],
         # Audit context for portal punches. Device and Desk check-ins leave these empty.
         "Employee Checkin": [
@@ -109,7 +135,30 @@ def _custom_fields():
             {"fieldname": "ess_review_comment", "label": "ESS Review Comment", "fieldtype": "Small Text",
              "insert_after": "ess_status", "read_only": 1},
         ],
+        **_hla_fields(),
     }, ignore_validate=True, update=True)
+
+
+def _weekly_off_type():
+    from thinknxg_ess_portal.services import weekly_off
+    try:
+        name = frappe.db.get_single_value("ESS Portal Settings", "weekly_off_shift_type") or "Weekly Off"
+    except Exception:
+        name = "Weekly Off"
+    weekly_off.ensure_shift_type(name)
+
+
+def _hla_fields():
+    if not frappe.db.exists("DocType", "Holiday List Assignment"):
+        return {}
+    return {"Holiday List Assignment": [
+        {"fieldname": "ess_generated", "label": "Created by ESS (weekly offs)", "fieldtype": "Check",
+         "insert_after": "from_date", "read_only": 1, "no_copy": 1},
+        {"fieldname": "ess_source", "label": "ESS Replaces", "fieldtype": "Data", "insert_after": "ess_generated",
+         "read_only": 1, "no_copy": 1, "depends_on": "ess_generated"},
+        {"fieldname": "ess_base_assignment", "label": "ESS Based On", "fieldtype": "Data", "insert_after": "ess_source",
+         "read_only": 1, "no_copy": 1, "depends_on": "ess_generated"},
+    ]}
 
 
 def _settings_defaults():

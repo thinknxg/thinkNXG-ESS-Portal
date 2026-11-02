@@ -15,7 +15,8 @@ ROSTER_KEYS = ["enable_roster", "roster_min_rest_hours", "roster_max_consecutive
                "roster_notify_on_publish", "roster_auto_weekly_off", "roster_backdate_days", "roster_backdate_roles",
                "show_own_checkins", "manager_checkin_visibility", "checkin_coordinates_visible_to",
                "checkin_records_max_days", "enable_comp_off", "comp_off_window_days", "comp_off_allow_roster_rest_days",
-               "comp_off_min_hours"]
+               "comp_off_min_hours", "enable_weekly_off_holidays", "roster_rest_as_weekly_off", "weekly_off_shift_type",
+               "weekly_off_missing_list"]
 RANGES = {"default_geofence_radius": (10, 5000), "max_gps_accuracy": (5, 1000), "shift_window_early_minutes": (0, 720),
           "shift_window_late_minutes": (0, 720), "checkin_cooldown_minutes": (0, 120),
           "checkin_rate_limit_per_hour": (5, 500), "max_travel_speed_kmh": (50, 2000), "roster_min_rest_hours": (0, 24),
@@ -57,6 +58,7 @@ def get_overview():
     p = checkin_policy.resolve(None, settings=frappe._dict(values))
     return {"values": values, "summary": checkin_policy.summary(p), "can_edit": identity.is_hr_manager() or identity.is_admin(),
             "native_geolocation_tracking": _native_geolocation(),
+            "shift_types": frappe.get_all("Shift Type", pluck="name", order_by="name asc"),
             "counts": {"overrides": frappe.db.count("ESS Checkin Policy", {"is_active": 1}),
                        "locations": frappe.db.count("ESS Checkin Location", {"is_active": 1}),
                        "denied_7d": frappe.db.count("ESS Checkin Log", {"decision": "Denied",

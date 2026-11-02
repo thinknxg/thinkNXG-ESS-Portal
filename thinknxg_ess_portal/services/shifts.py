@@ -33,7 +33,7 @@ def shift_type(name):
     if data is None:
         meta = frappe.get_meta("Shift Type")
         opt = [f for f in ("begin_check_in_before_shift_start_time", "allow_check_out_after_shift_end_time", "color",
-                           "ess_code", "ess_color") if meta.has_field(f)]
+                           "ess_code", "ess_color", "ess_weekly_off") if meta.has_field(f)]
         row = frappe.db.get_value("Shift Type", name, ["name", "start_time", "end_time"] + opt, as_dict=True)
         if not row:
             return None
@@ -48,6 +48,7 @@ def shift_type(name):
             "early": early, "late": late, "hours": win["hours"] if win else 0, "overnight": bool(win and win["overnight"]),
             "code": (row.get("ess_code") or _code(name))[:3],
             "color": row.get("ess_color") or NATIVE_COLORS.get(row.get("color")) or AUTO[sum(map(ord, name)) % len(AUTO)],
+            "weekly_off": bool(cint(row.get("ess_weekly_off"))),
         }
         frappe.cache.set_value(key, data, expires_in_sec=600)
     return data
@@ -107,7 +108,22 @@ def leaves(employees, start, end):
 
 
 def holidays_for(employees, start, end):
-    """{employee: {date: {"description", "weekly_off"}}}, resolving each employee's holiday list once per list."""
+    """{employee: {date: {"description", "weekly_off"}}}, honouring holiday lists that change within the range."""
+    try:
+        from hrms.utils.holiday_list import get_holiday_list_ranges_for_employees, get_holidays_in_ranges_map
+    except ImportError:
+        return _holidays_for_single_list(employees, start, end)
+    employees = list(employees)
+    companies = dict(frappe.get_all("Employee", filters={"name": ["in", employees or [""]]}, fields=["name", "company"],
+                                    as_list=True))
+    ranges = get_holiday_list_ranges_for_employees({e: companies.get(e) for e in employees}, start, end,
+                                                   raise_exception=False)
+    found = get_holidays_in_ranges_map(ranges)
+    return {e: {getdate(h.holiday_date): {"description": h.description, "weekly_off": bool(h.weekly_off)}
+                for h in found.get(e, [])} for e in employees}
+
+
+def _holidays_for_single_list(employees, start, end):
     lists, out = {}, {}
     for emp in employees:
         hl = hrms.holiday_list(emp)
@@ -145,9 +161,13 @@ def plan(employees, start, end, with_context=True):
             elif not rows and defaults.get(emp) and not h:
                 rows, source = [frappe._dict(shift_type=defaults[emp], shift_location=None, name=None, ess_roster=None)], "default"
             windows = []
+            off = False
             for a in rows:
                 st = shift_type(a.shift_type)
                 if not st:
+                    continue
+                if st.get("weekly_off"):
+                    off = True  # a Weekly Off / Rest Day assignment: no working window
                     continue
                 win = shiftwin.window(d, st["start"], st["end"], st["early"], st["late"])
                 if not win:
@@ -156,7 +176,7 @@ def plan(employees, start, end, with_context=True):
                            assignment=a.name, source="roster" if a.get("ess_roster") else source)
                 windows.append(win)
             windows.sort(key=lambda x: x["start"])
-            days.append({"date": d, "windows": windows, "rest_day": d in rest.get(emp, set()), "holiday": h,
+            days.append({"date": d, "windows": windows, "rest_day": off or d in rest.get(emp, set()), "holiday": h,
                          "leave": lv.get(emp, {}).get(d)})
         out[emp] = days
     return out

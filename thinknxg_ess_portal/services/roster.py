@@ -11,7 +11,7 @@ from collections import defaultdict
 import frappe
 from frappe import _
 from frappe.utils import add_days, add_to_date, cint, date_diff, flt, get_datetime, getdate, now_datetime, today
-from thinknxg_ess_portal.services import identity, roster_rules, shifts, shiftwin
+from thinknxg_ess_portal.services import identity, roster_rules, shifts, shiftwin, weekly_off
 from thinknxg_ess_portal.services.audit import log_event
 from thinknxg_ess_portal.services.notifications import notify
 
@@ -431,7 +431,7 @@ def grid(name):
     hol = shifts.holidays_for(emps, doc.from_date, doc.to_date)
     lv = shifts.leaves(emps, doc.from_date, doc.to_date)
     used = {e.shift_type for e in entries if e.shift_type} | {r.shift_type for r in doc.requirements}
-    types = [t for t in shifts.all_shift_types() if t]
+    types = [t for t in shifts.all_shift_types() if t and not t.get("weekly_off")]
     patterns = []
     for p in frappe.get_all("ESS Shift Pattern", filters={"is_active": 1}, pluck="name"):
         pd = frappe.get_cached_doc("ESS Shift Pattern", p)
@@ -458,6 +458,7 @@ def grid(name):
         "can_trim_manual": identity.is_hr(), "validation": validate(doc, entries),
         "can_backdate": can_backdate(), "backdate_from": str(backdate_from()) if can_backdate() else None,
         "auto_weekly_off": bool(cint(identity.settings().get("roster_auto_weekly_off"))),
+        "rest_as_weekly_off": weekly_off.roster_rest_enabled(),
         "weekend_days": [x.strip() for x in (identity.settings().get("weekend_days") or "").split(",") if x.strip()],
     }
 
@@ -477,6 +478,7 @@ def _end_assignment(name, end):
         doc.save()
     except frappe.UpdateAfterSubmitError:
         frappe.db.set_value("Shift Assignment", name, "end_date", getdate(end))
+        weekly_off.queue(name)
         doc.add_comment("Info", _("End date set to {0} by ESS roster publishing.").format(end))
     return "ended"
 
@@ -488,6 +490,7 @@ def _cancel_assignment(name):
         doc.cancel()
     except frappe.ValidationError:
         frappe.db.set_value("Shift Assignment", name, "status", "Inactive")
+        weekly_off.queue(name)
         doc.add_comment("Info", _("Set inactive by ESS roster publishing."))
     return "cancelled"
 
@@ -500,6 +503,7 @@ def _deactivate(name):
         doc.save()
     except frappe.ValidationError:
         frappe.db.set_value("Shift Assignment", name, "status", "Inactive")
+        weekly_off.queue(name)
     doc.add_comment("Info", _("Set inactive by ESS roster publishing (trim manual assignments)."))
 
 
@@ -515,6 +519,17 @@ def _create_assignment(employee, company, shift_type, location, start, end, rost
     sa.insert()
     sa.submit()
     return sa.name
+
+
+def _keyer():
+    """Roster entry -> assignment key. Rest days become Weekly Off assignments when that setting is on."""
+    rest = (weekly_off.default_type(), "") if weekly_off.roster_rest_enabled() else None
+
+    def key(e):
+        if e.shift_type and not cint(e.is_rest_day):
+            return (e.shift_type, e.shift_location or "")
+        return rest if cint(e.is_rest_day) else None
+    return key
 
 
 def _digest(entries):
@@ -576,13 +591,13 @@ def _backfill(doc):
     companies = dict(frappe.get_all("Employee", filters={"name": ["in", list(by_emp) or [""]]},
                                     fields=["name", "company"], as_list=True))
     loc = "shift_location" if _assignment_meta().has_field("shift_location") else "null"
+    keyer = _keyer()
     for emp, rows in by_emp.items():
         marked = {getdate(x) for x in frappe.get_all("Attendance", filters={"employee": emp, "docstatus": 1,
                                                                             "attendance_date": ["between", [a, b]]},
                                                      pluck="attendance_date")}
         out["skipped_attendance"] += sum(1 for r in rows if getdate(r.date) in marked)
-        keyed = [(getdate(r.date), (r.shift_type, r.shift_location or "") if r.shift_type and not cint(r.is_rest_day) else None)
-                 for r in rows]
+        keyed = [(getdate(r.date), keyer(r)) for r in rows]
         for seg in roster_rules.segments(keyed, blocked=marked):
             frappe.db.savepoint("ess_roster_backfill")
             try:
@@ -649,49 +664,51 @@ def _publish(doc, trim_manual=False, employees=None, window=None, notify_people=
                 by_emp.setdefault(emp, [])
     companies = dict(frappe.get_all("Employee", filters={"name": ["in", list(by_emp) or [""]]},
                                     fields=["name", "company"], as_list=True))
+    keyer = _keyer()
+    wo_report = weekly_off.reset_report()
 
     for emp in sorted(by_emp):
         if start > end:
             break
         frappe.db.savepoint("ess_roster_publish")
         try:
-            manual = frappe.db.sql("""select name, start_date, end_date, shift_type from `tabShift Assignment`
-                where employee=%s and docstatus=1 and status='Active' and ifnull(ess_roster,'')=''
-                  and start_date<=%s and (end_date is null or end_date>=%s)""", (emp, end, start), as_dict=True)
-            if manual:
-                if not trim_manual:
-                    report["conflicts"].append({"employee": emp, "assignments": [m.name for m in manual]})
-                    continue
-                for m in manual:
-                    if getdate(m.start_date) < start:
-                        _end_assignment(m.name, add_days(start, -1))
+            with weekly_off.deferred():
+                manual = frappe.db.sql("""select name, start_date, end_date, shift_type from `tabShift Assignment`
+                    where employee=%s and docstatus=1 and status='Active' and ifnull(ess_roster,'')=''
+                      and start_date<=%s and (end_date is null or end_date>=%s)""", (emp, end, start), as_dict=True)
+                if manual:
+                    if not trim_manual:
+                        report["conflicts"].append({"employee": emp, "assignments": [m.name for m in manual]})
+                        continue
+                    for m in manual:
+                        if getdate(m.start_date) < start:
+                            _end_assignment(m.name, add_days(start, -1))
+                        else:
+                            _deactivate(m.name)
+                        report["trimmed"].append(m.name)
+                generated = frappe.db.sql("""select name, shift_type, start_date, end_date, ess_roster,
+                        {loc} as shift_location from `tabShift Assignment`
+                    where employee=%s and docstatus=1 and status='Active' and ifnull(ess_roster,'')!=''
+                      and start_date<=%s and (end_date is null or end_date>=%s)""".format(
+                    loc="shift_location" if _assignment_meta().has_field("shift_location") else "null"),
+                    (emp, end, start), as_dict=True)
+                for g in generated:
+                    tail_end = g.end_date
+                    if getdate(g.start_date) < start:
+                        _end_assignment(g.name, add_days(start, -1))
+                        report["ended"] += 1
                     else:
-                        _deactivate(m.name)
-                    report["trimmed"].append(m.name)
-            generated = frappe.db.sql("""select name, shift_type, start_date, end_date, ess_roster,
-                    {loc} as shift_location from `tabShift Assignment`
-                where employee=%s and docstatus=1 and status='Active' and ifnull(ess_roster,'')!=''
-                  and start_date<=%s and (end_date is null or end_date>=%s)""".format(
-                loc="shift_location" if _assignment_meta().has_field("shift_location") else "null"),
-                (emp, end, start), as_dict=True)
-            for g in generated:
-                tail_end = g.end_date
-                if getdate(g.start_date) < start:
-                    _end_assignment(g.name, add_days(start, -1))
-                    report["ended"] += 1
-                else:
-                    _cancel_assignment(g.name)
-                    report["cancelled"] += 1
-                if tail_end is None or getdate(tail_end) > end:
-                    _create_assignment(emp, companies.get(emp), g.shift_type, g.shift_location, add_days(end, 1),
-                                       tail_end, g.ess_roster)
-            keyed = [(getdate(e.date), (e.shift_type, e.shift_location or "") if e.shift_type and not cint(e.is_rest_day) else None)
-                     for e in by_emp[emp]]
-            for run in roster_rules.runs(keyed):
-                _create_assignment(emp, companies.get(emp), run["key"][0], run["key"][1] or None, run["start"], run["end"],
-                                   doc.name)
-                report["created"] += 1
-            report["employees"] += 1
+                        _cancel_assignment(g.name)
+                        report["cancelled"] += 1
+                    if tail_end is None or getdate(tail_end) > end:
+                        _create_assignment(emp, companies.get(emp), g.shift_type, g.shift_location, add_days(end, 1),
+                                           tail_end, g.ess_roster)
+                keyed = [(getdate(e.date), keyer(e)) for e in by_emp[emp]]
+                for run in roster_rules.runs(keyed):
+                    _create_assignment(emp, companies.get(emp), run["key"][0], run["key"][1] or None, run["start"], run["end"],
+                                       doc.name)
+                    report["created"] += 1
+                report["employees"] += 1
         except Exception as ex:
             frappe.db.rollback(save_point="ess_roster_publish")
             frappe.local.message_log = []
@@ -727,6 +744,7 @@ def _publish(doc, trim_manual=False, employees=None, window=None, notify_people=
                    _("Your roster is published") if first or emp not in old else _("Your roster has changed"),
                    _("{0}: {1} to {2}").format(doc.title, doc.from_date, doc.to_date), "/ess/roster", doc.doctype, doc.name)
     report["notified"] = len(changed)
+    report["weekly_off"] = wo_report
     log_event("Roster", doc.doctype, doc.name,
               details=f"publish v{values['version']} {report['from']}..{report['to']} created={report['created']} "
                       f"ended={report['ended']} cancelled={report['cancelled']} conflicts={len(report['conflicts'])} "

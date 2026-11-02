@@ -149,7 +149,7 @@ Per-employee **ESS Checkin Policy**: portal access (Inherit/Allow/Deny), GPS (In
 **Publishing** writes native **Shift Assignments**, one per run of identical days, tagged with `ess_roster`, so thinkNXG HR auto-attendance, shift-based check-in linking and payroll keep working as they do today:
 - By default only today onward is written, and past days lock once published. See *Past days* below.
 - Republishing ends or cancels the roster's own future assignments and recreates them; untagged (manual) assignments are never touched unless HR ticks *trim manual assignments*, which ends or deactivates them with a comment.
-- Rest days get no assignment. If an employee also has a **default shift**, thinkNXG HR falls back to it on rest days and may mark absence, so the planner warns; clear default shifts for rostered staff.
+- Rest days become **Weekly Off** shift assignments (see below) while *Publish roster rest days as weekly-off assignments* is on; otherwise they get no assignment, and an employee with a **default shift** may then be marked absent by thinkNXG HR, so the planner warns.
 - People whose plan changed are notified. Each publish is recorded in ESS Audit Event.
 
 **Department and branch filters.** The planner and the roster list filter by department, branch and name (kept in the URL, so a filtered view can be bookmarked). New rosters can be created for a whole department or branch, and *Add people* filters the same way. When a filter is on, coverage counts only the people shown and the planner says so.
@@ -163,6 +163,27 @@ Per-employee **ESS Checkin Policy**: portal access (Inherit/Allow/Deny), GPS (In
 - every past edit and backfill is written to ESS Audit Event.
 
 After a backfill, re-run *Process Auto Attendance* on the affected Shift Types (or mark attendance) for the past days to pick up the new shifts.
+
+## Weekly offs in holiday lists
+
+A Shift Assignment can be a **Weekly Off / Rest Day**: tick *Weekly Off / Rest Day* on the Shift Assignment form (Desk), which switches it to the *Weekly Off* shift type and makes the end date mandatory, or publish a roster whose rest days are planned in the portal (the planner's *Weekly offs → Set a rest period* marks a start-to-end range for many people at once). Any Shift Type can be marked *Weekly Off / Rest Day*; install creates one called **Weekly Off** (all day, auto attendance off).
+
+| Assignment event | Holiday list |
+|---|---|
+| Submitted | every date from start to end date is added as **"Weekly Off"** (`weekly_off = 1`), tagged with the assignment's name |
+| End date or status changed | its own rows that no longer apply are removed, new dates are added |
+| Cancelled or deleted | all rows tagged with that assignment are removed |
+
+What is never touched: dates that were already holidays (public holidays, the list's own weekly offs, rows added by hand, other assignments' rows) are left as they are and are not removed later. Only rows carrying the assignment's tag (`Holiday.ess_shift_assignment`) are ever deleted.
+
+**Which holiday list.** The list is the one thinkNXG HR applies to the employee on each date (Holiday List Assignments in v16, honouring list changes within the range; `Employee.holiday_list` on releases without them). Shared lists are never written to:
+- the first time an employee needs weekly offs in a shared list, a **personal copy** is created (`<list> · <employee>`, with *ESS Personal List For* and *ESS Copied From* set) and assigned to the employee from the date the shared list applied to them. A list used only by that employee is written directly;
+- the copy follows the shared list: when HR edits the shared list, its holidays are re-copied into every personal copy, keeping the weekly-off rows and anything added by hand to the copy (a new public holiday on the same date as a weekly off replaces the weekly-off row, noted on the list);
+- because thinkNXG HR picks an employee's own assignment before the company's, later company Holiday List Assignments are mirrored onto these employees (now and whenever a new company assignment is submitted), so next year's company list still applies. Generated assignments are marked *Created by ESS (weekly offs)*.
+
+If no holiday list covers a date (for example a weekly off in January before next year's list exists), the assignment is refused with a clear message, or, with *When no holiday list covers a date → Skip*, those days are skipped and noted in the assignment's *Holiday List Entries* field.
+
+Notes: a Weekly Off assignment overlaps any working shift on the same dates, so thinkNXG HR's own overlap check stops the two being combined. Punches on such a day are still recorded (portal check-in follows the *allow check-in without a shift* setting); turn on auto attendance for the Weekly Off shift type if those days should be marked Present automatically (they then qualify for compensatory leave), since generated holidays stop them being marked absent.
 
 ## Check-in records
 
@@ -210,8 +231,10 @@ EN/AR with full RTL, light/dark/system themes, keyboard command palette (Ctrl/�
 ## Tests
 
 - `thinknxg_ess_portal/tests/test_pure.py` — 20 unit tests for geofence maths, accuracy rules, risk flags, shift windows (including overnight and thinkNXG's timedelta times), roster rules, coverage and rotation patterns. Runs without a bench: `python -m pytest thinknxg_ess_portal/tests/test_pure.py`.
+- `thinknxg_ess_portal/tests/test_weekly_off_rules.py` — 8 unit tests for which holiday rows an assignment adds, keeps and removes, personal-list mirroring and company-assignment mirrors (no bench needed).
 - `thinknxg_ess_portal/tests/test_checkin_roster.py` — integration tests: global off vs. Allow override, *Enforce global* ignoring overrides, Deny override writing a denied log, outside-geofence and poor-accuracy refusals, GPS exemption, shift-window enforcement, managers blocked from rostering outside their team, publish creating tagged assignments and republish replacing them, swap needing colleague acceptance before it reaches the manager.
 - `thinknxg_ess_portal/tests/test_roster_compoff.py` — weekly offs prefilled and re-marked, past days locked without the backdate role, backdate role filling a missing past assignment, backfill skipping days with attendance, comp-off eligibility, double-claim prevention and rejection, working days refused, check-in visibility for employees vs managers and hidden coordinates, range cap.
+- `thinknxg_ess_portal/tests/test_weekly_off.py` — ticking Weekly Off, personal list created while the shared list and colleagues stay unchanged, change/cancel/delete removing only the assignment's rows, personal list following the shared list, missing-list stop vs skip, next year's company list still applying.
 
 - `thinknxg_ess_portal/tests/test_security.py` — colleague ticket isolation, confidential tickets hidden from agents, internal notes hidden, manager scope = reporting line, non-manager blocked from team member, unauthorised approval blocked, protected profile fields rejected, idempotent duplicate submission, assistant refusal for a colleague's payslip, AI tool identity stripping, self-recognition blocked.
   `bench --site test.site run-tests --app thinknxg_ess_portal`

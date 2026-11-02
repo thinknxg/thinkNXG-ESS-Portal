@@ -24,6 +24,8 @@ website_route_rules = [
 after_install = "thinknxg_ess_portal.install.after_install"
 
 # Lets published ESS roster rest days count as days off for compensatory leave (setting-controlled).
+doctype_js = {"Shift Assignment": "public/js/shift_assignment.js"}
+
 override_doctype_class = {
     "Compensatory Leave Request": "thinknxg_ess_portal.overrides.compensatory_leave_request.ESSCompensatoryLeaveRequest",
 }
@@ -64,6 +66,17 @@ doc_events = {
     "ESS Announcement": {"on_update": "thinknxg_ess_portal.services.events.on_announcement_update"},
     # cache invalidation only - the portal never changes how these native doctypes behave
     "Shift Type": {"on_update": "thinknxg_ess_portal.services.shifts.clear_cache"},
+    # Weekly Off / Rest Day Shift Assignments are written to the employee's holiday list (services/weekly_off.py).
+    "Shift Assignment": {
+        "before_validate": "thinknxg_ess_portal.services.weekly_off.before_validate",
+        "on_submit": "thinknxg_ess_portal.services.weekly_off.on_change",
+        "on_update_after_submit": "thinknxg_ess_portal.services.weekly_off.on_change",
+        "on_cancel": "thinknxg_ess_portal.services.weekly_off.on_change",
+        "on_trash": "thinknxg_ess_portal.services.weekly_off.on_trash",
+    },
+    "Holiday List": {"on_update": "thinknxg_ess_portal.services.weekly_off.on_holiday_list_update"},
+    "Holiday List Assignment": {"on_submit": "thinknxg_ess_portal.services.weekly_off.on_hla_submit",
+                                "on_cancel": "thinknxg_ess_portal.services.weekly_off.on_hla_cancel"},
     "ESS Checkin Location": {"on_trash": "thinknxg_ess_portal.services.checkin_policy.clear_location_cache"},
 }
 

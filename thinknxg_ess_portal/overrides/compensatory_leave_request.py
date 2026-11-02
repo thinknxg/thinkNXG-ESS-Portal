@@ -5,11 +5,12 @@ Only validate_holidays is extended, and only when "Roster rest days are eligible
 """
 import frappe
 from frappe.utils import cint, getdate
-from hrms.hr.doctype.compensatory_leave_request.compensatory_leave_request import CompensatoryLeaveRequest
 from hrms.hr.utils import get_holiday_dates_for_employee
 
 
-class ESSCompensatoryLeaveRequest(CompensatoryLeaveRequest):
+class ESSCompensatoryLeaveMixin:
+    """Mixed in front of the native Compensatory Leave Request class (hooks.extend_doctype_class)."""
+
     def validate_holidays(self):
         if not cint(frappe.db.get_single_value("ESS Portal Settings", "comp_off_allow_roster_rest_days")):
             return super().validate_holidays()

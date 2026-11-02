@@ -48,7 +48,11 @@ def after_install():
 def after_migrate():
     _roles()
     _custom_fields()
-    _weekly_off_type()
+    try:
+        _weekly_off_type()
+    except Exception:
+        # never block install or migrate; the type can be created later from ESS Portal Settings
+        frappe.log_error(title="ESS: could not create the Weekly Off shift type")
     _settings()
     _seed()
     frappe.db.commit()

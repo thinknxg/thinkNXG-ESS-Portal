@@ -2,3 +2,4 @@
 
 [post_model_sync]
 thinknxg_ess_portal.patches.v1_0.ensure_defaults
+thinknxg_ess_portal.patches.v1_3.reload_doctypes

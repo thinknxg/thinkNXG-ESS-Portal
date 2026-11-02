@@ -3,7 +3,7 @@
  * - SPA navigations: network-first with an offline page fallback.
  * - API, files and private documents are NEVER cached (payslips, letters, personal data).
  */
-const VERSION = "c9010abf0b";
+const VERSION = "25077f11ab";
 const STATIC = `ess-static-${VERSION}`;
 const ASSET_PREFIX = "/assets/thinknxg_ess_portal/ess/";
 const OFFLINE = ASSET_PREFIX + "offline.html";
